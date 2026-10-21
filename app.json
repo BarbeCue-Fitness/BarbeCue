@@ -1,0 +1,9 @@
+{
+  "expo": {
+    "name": "Reliable Calorie Tracker",
+    "slug": "reliable-calorie-tracker",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light"
+  }
+}
