@@ -39,5 +39,13 @@ yarn-error.*
 example
 
 # generated native folders
-/ios
-/android
+ios/
+android/
+
+# local tooling and scratch
+.agents/
+.opencode/
+What_I_Wanted/
+WhatsApp*.mp4
+
+.claude/skills/
