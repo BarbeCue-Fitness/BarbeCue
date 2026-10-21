@@ -1,64 +1,146 @@
-import { useEffect, useState } from 'react';
-import { FlatList, KeyboardAvoidingView, Platform, Pressable, StyleSheet, TextInput } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Alert, FlatList, KeyboardAvoidingView, Platform, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { IconButton } from '@/components/icon-button';
+import { ProfileAvatar } from '@/components/profile-avatar';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Spacing } from '@/constants/theme';
+import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { getMessages, sendMessage } from '@/services/api';
-import type { Message } from '@/types';
+import { getMatchById, getMessages, markMessagesRead, sendMessage } from '@/services/api';
+import type { Match, Message } from '@/types';
+
+function timeLabel(timestamp: string) {
+  return new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(new Date(timestamp));
+}
 
 export default function ChatScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const router = useRouter();
   const theme = useTheme();
+  const listRef = useRef<FlatList<Message>>(null);
+  const [match, setMatch] = useState<Match | undefined>();
   const [messages, setMessages] = useState<Message[]>([]);
   const [text, setText] = useState('');
+  const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState('');
 
   useEffect(() => {
-    getMessages(id ?? '').then(setMessages);
+    let active = true;
+    if (!id) return;
+    void Promise.all([getMatchById(id), getMessages(id)]).then(async ([currentMatch, currentMessages]) => {
+      await markMessagesRead(id);
+      if (!active) return;
+      setMatch(currentMatch);
+      setMessages(currentMessages.map((message) => ({ ...message, read: true })));
+    });
+    return () => { active = false; };
   }, [id]);
 
-  const onSend = async () => {
+  const onSend = useCallback(async () => {
     const trimmed = text.trim();
-    if (!trimmed) return;
+    if (!trimmed || !id || sending) return;
+    setSending(true);
+    setSendError('');
     setText('');
-    const message = await sendMessage(id ?? '', trimmed);
-    setMessages((m) => [...m, message]);
-  };
+    try {
+      const message = await sendMessage(id, trimmed);
+      setMessages((current) => [...current, message]);
+      requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }));
+    } catch {
+      setText(trimmed); // restore unsent text — a failed send must not eat the message
+      setSendError('Message not sent. Check your connection and try again.');
+    } finally {
+      setSending(false);
+    }
+  }, [id, sending, text]);
+
+  const insertWorkoutPrompt = () => setText((current) => current || 'Want to train together this week?');
 
   return (
     <ThemedView style={styles.container}>
-      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={90}>
-        <FlatList
-          data={messages}
-          keyExtractor={(m) => m.id}
-          contentContainerStyle={styles.list}
-          renderItem={({ item }) => {
-            const mine = item.senderId === 'me';
-            return (
-              <ThemedView
-                type={mine ? 'backgroundSelected' : 'backgroundElement'}
-                style={[styles.bubble, mine ? styles.bubbleMine : styles.bubbleTheirs]}>
-                <ThemedText type="small">{item.text}</ThemedText>
-              </ThemedView>
-            );
-          }}
-        />
+      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={0}>
+        <SafeAreaView style={styles.safe} edges={['top']}>
+          <View style={[styles.header, { borderBottomColor: theme.border }]}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Back to messages" onPress={() => router.back()} style={styles.back}>
+              <Ionicons name="arrow-back" size={22} color={theme.text} />
+            </Pressable>
+            {match ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`View ${match.user.name} profile`}
+                onPress={() => router.push({ pathname: '/user/[id]', params: { id: match.user.id } })}
+                style={styles.person}>
+                <ProfileAvatar uri={match.user.avatar} name={match.user.name} size={44} active={match.user.activeNow} verified={match.user.verified} />
+                <View style={styles.personCopy}>
+                  <ThemedText type="smallBold">{match.user.name}</ThemedText>
+                  <ThemedText type="small" themeColor="textSecondary">{match.user.activeNow ? 'Active now' : 'Your gym match'}</ThemedText>
+                </View>
+              </Pressable>
+            ) : (
+              <ThemedText type="smallBold">Conversation</ThemedText>
+            )}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="View profile"
+              onPress={() => match ? router.push({ pathname: '/user/[id]', params: { id: match.user.id } }) : Alert.alert('Conversation', 'The match details are still loading.')}
+              style={styles.more}>
+              <Ionicons name="person-outline" size={21} color={theme.text} />
+            </Pressable>
+          </View>
 
-        <SafeAreaView edges={['bottom']} style={styles.inputRow}>
-          <TextInput
-            style={[styles.input, { color: theme.text, borderColor: theme.backgroundSelected }]}
-            placeholder="Message…"
-            placeholderTextColor={theme.textSecondary}
-            value={text}
-            onChangeText={setText}
-            onSubmitEditing={onSend}
+          <FlatList
+            ref={listRef}
+            data={messages}
+            keyExtractor={(message) => message.id}
+            contentContainerStyle={styles.list}
+            keyboardShouldPersistTaps="handled"
+            onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
+            renderItem={({ item }) => {
+              const mine = item.senderId === 'me';
+              return (
+                <View style={[styles.messageGroup, mine ? styles.mine : styles.theirs]}>
+                  <ThemedView
+                    type={mine ? 'backgroundSelected' : 'backgroundElement'}
+                    style={[styles.bubble, mine && { backgroundColor: theme.accent }]}>
+                    <ThemedText type="small" themeColor={mine ? 'onAccent' : 'text'}>{item.text}</ThemedText>
+                    <View style={styles.messageMeta}>
+                      <ThemedText type="caption" style={{ color: mine ? theme.onAccent : theme.textSecondary }}>{timeLabel(item.timestamp)}</ThemedText>
+                      {mine ? <Ionicons name={item.read ? 'checkmark-done' : 'checkmark'} size={14} color={theme.onAccent} /> : null}
+                    </View>
+                  </ThemedView>
+                </View>
+              );
+            }}
           />
-          <Pressable onPress={onSend} style={[styles.send, { backgroundColor: theme.text }]}>
-            <ThemedText type="smallBold" themeColor="background">Send</ThemedText>
-          </Pressable>
+
+          {sendError ? <ThemedText type="caption" themeColor="danger" accessibilityRole="alert" style={styles.sendError}>{sendError}</ThemedText> : null}
+          <SafeAreaView edges={['bottom']} style={[styles.composer, { borderTopColor: theme.border }]}>
+            <IconButton name="barbell-outline" label="Insert workout invite" size={46} onPress={insertWorkoutPrompt} />
+            <TextInput
+              accessibilityLabel="Message"
+              style={[styles.input, { color: theme.text, backgroundColor: theme.backgroundElement, borderColor: theme.border }]}
+              placeholder="Type a message…"
+              placeholderTextColor={theme.textSecondary}
+              value={text}
+              onChangeText={setText}
+              onSubmitEditing={() => void onSend()}
+              returnKeyType="send"
+              maxLength={1000}
+              multiline
+            />
+            <IconButton
+              name="send"
+              label="Send message"
+              variant="primary"
+              size={48}
+              disabled={!text.trim() || sending}
+              onPress={() => void onSend()}
+            />
+          </SafeAreaView>
         </SafeAreaView>
       </KeyboardAvoidingView>
     </ThemedView>
@@ -68,11 +150,19 @@ export default function ChatScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   flex: { flex: 1 },
-  list: { padding: Spacing.four, gap: Spacing.two },
-  bubble: { maxWidth: '75%', padding: Spacing.three, borderRadius: Spacing.four },
-  bubbleMine: { alignSelf: 'flex-end', borderBottomRightRadius: Spacing.one },
-  bubbleTheirs: { alignSelf: 'flex-start', borderBottomLeftRadius: Spacing.one },
-  inputRow: { flexDirection: 'row', gap: Spacing.two, padding: Spacing.three },
-  input: { flex: 1, borderWidth: 1, borderRadius: Spacing.three, paddingHorizontal: Spacing.three, paddingVertical: Spacing.two },
-  send: { justifyContent: 'center', paddingHorizontal: Spacing.four, borderRadius: Spacing.three },
+  safe: { flex: 1 },
+  header: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, paddingHorizontal: Spacing.two, paddingVertical: Spacing.one, borderBottomWidth: StyleSheet.hairlineWidth },
+  back: { width: 44, height: 44, justifyContent: 'center', alignItems: 'center' },
+  person: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
+  personCopy: { gap: Spacing.half },
+  more: { width: 44, height: 44, justifyContent: 'center', alignItems: 'center' },
+  list: { flexGrow: 1, justifyContent: 'flex-end', padding: Spacing.three, gap: Spacing.two },
+  messageGroup: { maxWidth: '82%' },
+  mine: { alignSelf: 'flex-end' },
+  theirs: { alignSelf: 'flex-start' },
+  bubble: { padding: Spacing.two, borderRadius: Radius.medium, gap: Spacing.one },
+  messageMeta: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: Spacing.half },
+  composer: { flexDirection: 'row', alignItems: 'flex-end', gap: Spacing.two, padding: Spacing.two, borderTopWidth: StyleSheet.hairlineWidth },
+  sendError: { textAlign: 'center', paddingBottom: Spacing.half },
+  input: { flex: 1, minHeight: 46, maxHeight: 120, borderWidth: 1, borderRadius: Radius.round, paddingHorizontal: Spacing.three, paddingVertical: Spacing.two },
 });

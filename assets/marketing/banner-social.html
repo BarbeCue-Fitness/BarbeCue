@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>BarbeCue — Social Banner 1080x1080</title>
+<style>
+  :root { --ink:#1C1C1E; --ember:#FF5A1F; --amber:#FFB020; }
+  * { margin:0; box-sizing:border-box; }
+  body { width:1080px; height:1080px; overflow:hidden; }
+  .canvas {
+    width:1080px; height:1080px; position:relative;
+    background:
+      radial-gradient(90% 60% at 50% 100%, rgba(255,90,31,.5), transparent 70%),
+      radial-gradient(60% 40% at 50% 30%, rgba(255,176,32,.14), transparent 70%),
+      #0B0B0C;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    font-family:-apple-system,"Segoe UI",system-ui,sans-serif; color:#fff; text-align:center;
+  }
+  .mark { width:340px; height:auto; filter:drop-shadow(0 24px 60px rgba(255,90,31,.45)); }
+  h1 { font-size:120px; font-weight:800; letter-spacing:-4px; line-height:1; margin-top:44px; }
+  h1 span { background:linear-gradient(180deg,#FFB020,#FF5A1F); -webkit-background-clip:text; background-clip:text; color:transparent; }
+  .tag { margin-top:30px; font-size:34px; font-weight:600; letter-spacing:6px; color:#B0B4BA; text-transform:uppercase; }
+  .pill {
+    margin-top:64px; padding:26px 64px; border-radius:999px;
+    background:linear-gradient(180deg,#FFB020,#FF5A1F);
+    font-size:36px; font-weight:700; color:#fff;
+    box-shadow:0 16px 48px rgba(255,90,31,.5);
+  }
+  .flames { position:absolute; bottom:-40px; left:0; right:0; height:280px; opacity:.9; }
+</style>
+</head>
+<body>
+<div class="canvas">
+  <svg class="mark" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <defs>
+      <linearGradient id="emberGrad" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#FFB020"/>
+        <stop offset="1" stop-color="#FF5A1F"/>
+      </linearGradient>
+    </defs>
+    <g fill="#FFFFFF">
+      <rect x="2" y="15" width="11" height="34" rx="5.5"/>
+      <rect x="51" y="15" width="11" height="34" rx="5.5"/>
+      <rect x="15" y="21" width="5" height="22" rx="2.5"/>
+      <rect x="44" y="21" width="5" height="22" rx="2.5"/>
+      <rect x="19" y="29.5" width="26" height="5" rx="2.5"/>
+      <rect x="22" y="31" width="20" height="9" rx="4"/>
+      <rect x="25" y="38" width="3" height="9" rx="1.5" transform="rotate(12 26.5 38)"/>
+      <rect x="36" y="38" width="3" height="9" rx="1.5" transform="rotate(-12 37.5 38)"/>
+    </g>
+    <path d="M19 31a13 13 0 0 1 26 0Z" fill="url(#emberGrad)"/>
+    <rect x="29" y="14.5" width="6" height="5" rx="2.5" fill="url(#emberGrad)"/>
+    <g fill="none" stroke="#FFB020" stroke-width="2.2" stroke-linecap="round">
+      <path d="M24.5 13c1.6-2 .2-3.6 1.4-5.6"/>
+      <path d="M39.5 13c-1.6-2-.2-3.6-1.4-5.6"/>
+    </g>
+    <path d="M20.5 31h23" stroke="#0B0B0C" stroke-width="2.2" stroke-linecap="round" fill="none"/>
+  </svg>
+  <h1>Barbe<span>Cue</span></h1>
+  <div class="tag">Better Workouts. Better People.</div>
+  <div class="pill">Swipe right on someone who lifts 🔥</div>
+</div>
+</body>
+</html>

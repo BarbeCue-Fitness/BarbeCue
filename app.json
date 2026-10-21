@@ -13,7 +13,7 @@
         "foregroundImage": "./assets/branding/adaptive-foreground.png",
         "monochromeImage": "./assets/branding/adaptive-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": true
     },
     "web": {
       "output": "server",
@@ -24,12 +24,13 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#FFFFFF",
+          "backgroundColor": "#0B0B0C",
           "image": "./assets/branding/adaptive-monochrome.png",
           "imageWidth": 144
         }
       ],
-      "expo-font"
+      "expo-font",
+      "expo-sqlite"
     ],
     "experiments": {
       "typedRoutes": true,

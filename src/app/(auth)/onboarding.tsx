@@ -1,17 +1,19 @@
 import { useRef, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, View, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { Link, router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { PrimaryButton } from '@/components/primary-button';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Spacing } from '@/constants/theme';
+import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 const SLIDES = [
-  { emoji: '🥩', title: 'Find Your Training Partner', text: 'Swipe to meet people who lift, run, and stretch at your pace.' },
-  { emoji: '📍', title: 'Explore People Near You', text: 'Filter by distance, gym and fitness level to find your crew.' },
-  { emoji: '💪', title: 'Match & Train', text: 'Chat, plan workouts and keep each other consistent.' },
+  { icon: 'barbell-outline', title: 'Find Your Training Partner', text: 'Swipe to meet people who lift, run, and stretch at your pace.' },
+  { icon: 'location-outline', title: 'Explore People Near You', text: 'Filter by distance, gym and fitness level to find your crew.' },
+  { icon: 'people-outline', title: 'Match & Train', text: 'Chat, plan workouts and keep each other consistent.' },
 ] as const;
 
 export default function OnboardingScreen() {
@@ -41,7 +43,7 @@ export default function OnboardingScreen() {
           keyExtractor={(s) => s.title}
           renderItem={({ item }) => (
             <View style={styles.slide}>
-              <ThemedText type="title">{item.emoji}</ThemedText>
+              <Ionicons name={item.icon} size={56} color={theme.accent} />
               <ThemedText type="subtitle" style={styles.center}>{item.title}</ThemedText>
               <ThemedText themeColor="textSecondary" style={styles.center}>{item.text}</ThemedText>
             </View>
@@ -49,16 +51,14 @@ export default function OnboardingScreen() {
         />
 
         <View style={styles.footer}>
-          <View style={styles.dots}>
+          <View accessibilityRole="progressbar" accessibilityLabel={`Step ${page + 1} of ${SLIDES.length}`} style={styles.dots}>
             {SLIDES.map((s, i) => (
-              <View key={s.title} style={[styles.dot, i === page && { backgroundColor: theme.text }]} />
+              <View key={s.title} style={[styles.dot, { backgroundColor: theme.textSecondary }, i === page && { backgroundColor: theme.text }]} />
             ))}
           </View>
-          <Pressable style={[styles.button, { backgroundColor: theme.text }]} onPress={next}>
-            <ThemedText type="smallBold" themeColor="background">Next</ThemedText>
-          </Pressable>
+          <PrimaryButton label={page === SLIDES.length - 1 ? 'Get Started' : 'Next'} onPress={next} style={styles.button} />
           <Link href="/(auth)/login" asChild>
-            <Pressable>
+            <Pressable accessibilityRole="link" accessibilityLabel="Skip onboarding">
               <ThemedText type="small" themeColor="textSecondary">Skip</ThemedText>
             </Pressable>
           </Link>
@@ -82,6 +82,6 @@ const styles = StyleSheet.create({
   center: { textAlign: 'center', maxWidth: 320 },
   footer: { alignItems: 'center', gap: Spacing.three, padding: Spacing.four },
   dots: { flexDirection: 'row', gap: Spacing.two },
-  dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: 'rgba(128,128,128,0.4)' },
-  button: { alignItems: 'center', padding: Spacing.three, borderRadius: Spacing.three, alignSelf: 'stretch' },
+  dot: { width: 8, height: 8, borderRadius: Radius.round },
+  button: { alignSelf: 'stretch' },
 });

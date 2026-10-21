@@ -6,11 +6,17 @@ export interface User {
   fitnessLevel: 'Beginner' | 'Intermediate' | 'Advanced';
   focus: string; // e.g. 'Strength', 'Cardio', 'Beginner', 'Yoga'
   bio: string;
+  prompt: string; // "Looking for" prompt answer shown on the discover card
   avatar: string;
+  photos: string[];
   interests: string[];
   goals: string[];
   schedule: string;
   languages: string[];
+  verified?: boolean;
+  activeNow?: boolean;
+  standout?: boolean;
+  bodyType?: string;
   diet?: string;
   activityLevel?: 'Low' | 'Moderate' | 'High';
   height?: string;
@@ -29,6 +35,8 @@ export interface Match {
   user: User;
   matchedAt: string;
   hasUnread: boolean;
+  unread: number;
+  category?: 'new' | 'active' | 'expired';
 }
 
 export interface Message {
@@ -38,6 +46,7 @@ export interface Message {
   text: string;
   timestamp: string;
   type: 'text' | 'image';
+  read?: boolean;
 }
 
 export interface Filters {
@@ -49,7 +58,9 @@ export interface Filters {
   languages: string[];
   activityLevel: string[];
   interests: string[];
-  height: string;
+  goals: string[];
+  bodyType: string[];
+  height: string[];
 }
 
 export interface AuthUser {

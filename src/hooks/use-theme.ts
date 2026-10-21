@@ -3,15 +3,19 @@
  * https://docs.expo.dev/guides/color-schemes/
  */
 
-import { Colors } from '@/constants/theme';
+import { getColorSet } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useSettings } from '@/contexts/settings-context';
 
-type ColorScheme = 'light' | 'dark' | 'unspecified' | null;
-
-export function getTheme(colorScheme: ColorScheme) {
-  return Colors[colorScheme === 'dark' ? 'dark' : 'light'];
+/** The light/dark mode actually in effect: the user's choice, or the system when set to System. */
+export function useResolvedColorScheme(): 'light' | 'dark' {
+  const { colorMode } = useSettings();
+  const systemScheme = useColorScheme();
+  if (colorMode === 'system') return systemScheme === 'dark' ? 'dark' : 'light';
+  return colorMode;
 }
 
 export function useTheme() {
-  return getTheme(useColorScheme());
+  const { themeName } = useSettings();
+  return getColorSet(themeName, useResolvedColorScheme());
 }

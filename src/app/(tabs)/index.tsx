@@ -1,34 +1,57 @@
 import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
+import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Swiper from 'react-native-deck-swiper';
 import { Ionicons } from '@expo/vector-icons';
 
-import { Card } from '@/components/discover-card';
+import { ChoiceChip } from '@/components/choice-chip';
+import { DiscoverCard } from '@/components/discover-card';
 import { IconButton } from '@/components/icon-button';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Spacing } from '@/constants/theme';
+import { Radius, Spacing } from '@/constants/theme';
+import { useFilters } from '@/contexts/filters-context';
+import { useSettings } from '@/contexts/settings-context';
 import { useTheme } from '@/hooks/use-theme';
-import { getDiscoverUsers, sendSwipe } from '@/services/api';
-import type { User } from '@/types';
+import { roundDistance } from '@/lib/distance';
+import { getDiscoverUsers, getMatches, sendSwipe } from '@/services/api';
+import type { SwipeAction, User } from '@/types';
+
+type DiscoveryMode = 'nearby' | 'standouts';
 
 export default function DiscoverScreen() {
+  const router = useRouter();
   const theme = useTheme();
+  const { distanceUnit } = useSettings();
+  const { filters, beginEditing } = useFilters();
   const swiperRef = useRef<Swiper<User>>(null);
   const [users, setUsers] = useState<User[]>([]);
-  const [matched, setMatched] = useState<User | null>(null);
+  const [deckSize, setDeckSize] = useState<{ width: number; height: number } | null>(null);
+  const [mode, setMode] = useState<DiscoveryMode>('nearby');
+  const [matched, setMatched] = useState<{ user: User; matchId?: string } | null>(null);
+  const [matchCount, setMatchCount] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [completed, setCompleted] = useState(false);
 
-  const load = () => getDiscoverUsers().then(setUsers);
   useEffect(() => {
-    load();
-  }, []);
+    let active = true;
+    void Promise.all([getDiscoverUsers(filters), getMatches()]).then(([filteredUsers, matches]) => {
+      if (!active) return;
+      const results = mode === 'standouts' ? filteredUsers.filter((user) => user.standout) : filteredUsers;
+      setUsers(results);
+      setMatchCount(matches.length);
+      setLoading(false);
+      setCompleted(false);
+    });
+    return () => { active = false; };
+  }, [filters, mode]);
 
-  const onSwipe = async (index: number, action: 'like' | 'skip') => {
+  const onSwipe = async (index: number, action: SwipeAction['action']) => {
     const user = users[index];
     if (!user) return;
-    const { matched: isMatch } = await sendSwipe({ userId: user.id, action, timestamp: new Date().toISOString() });
-    if (isMatch) setMatched(user);
+    const result = await sendSwipe({ userId: user.id, action, timestamp: new Date().toISOString() });
+    if (result.matched) setMatched({ user, matchId: result.matchId });
   };
 
   useEffect(() => {
@@ -37,70 +60,154 @@ export default function DiscoverScreen() {
     return () => clearTimeout(timer);
   }, [matched]);
 
+  const openFilters = () => {
+    beginEditing();
+    router.push('/filters');
+  };
+  const filterCount = Object.entries(filters).reduce((count, [key, value]) => {
+    if (key === 'ageRange') return count + (filters.ageRange[0] !== 18 || filters.ageRange[1] !== 40 ? 1 : 0);
+    if (key === 'distance') return count + (filters.distance !== 25 ? 1 : 0);
+    if (Array.isArray(value)) return count + (value.length > 0 ? 1 : 0);
+    return count;
+  }, 0);
+
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safe} edges={['top']}>
-        <ThemedText type="subtitle" style={styles.title}>
-          BarbeCue
-        </ThemedText>
-
-        {users.length === 0 ? (
-          <ThemedText themeColor="textSecondary">Loading partners…</ThemedText>
-        ) : (
-          <Swiper
-            ref={swiperRef}
-            cards={users}
-            renderCard={(card) => (card ? <Card user={card} /> : <View />)}
-            cardIndex={0}
-            backgroundColor="transparent"
-            stackSize={3}
-            stackScale={8}
-            stackSeparation={12}
-            onSwipedLeft={(i) => onSwipe(i, 'skip')}
-            onSwipedRight={(i) => onSwipe(i, 'like')}
-            onSwipedAll={load}
-            overlayLabels={{
-              left: { title: 'SKIP', style: { label: { color: '#ef4444' } } },
-              right: { title: 'MATCH', style: { label: { color: '#22c55e' } } },
-            }}
-          />
-        )}
-
-        <View style={styles.actions}>
-          <IconButton name="close" color="#ef4444" onPress={() => swiperRef.current?.swipeLeft()} />
-          <IconButton name="star" color="#f59e0b" onPress={() => swiperRef.current?.swipeTop()} />
-          <IconButton name="heart" color="#22c55e" onPress={() => swiperRef.current?.swipeRight()} />
+        <View style={styles.header}>
+          <View style={styles.brand}>
+            <Ionicons name="barbell" size={25} color={theme.accent} />
+            <View style={styles.brandCopy}>
+              <ThemedText type="heading">BarbeCue</ThemedText>
+              <ThemedText type="small" themeColor="textSecondary">Same goals. Better company.</ThemedText>
+            </View>
+          </View>
+          <ChoiceChip label={`Matches ${matchCount}`} selected={false} onPress={() => router.push('/matches')} />
+          <IconButton name="options-outline" label="Open filters" onPress={openFilters} />
         </View>
+
+        <View style={styles.modeRow}>
+          <ChoiceChip label="Standouts" selected={mode === 'standouts'} onPress={() => setMode('standouts')} />
+          <ChoiceChip label="Nearby" selected={mode === 'nearby'} onPress={() => setMode('nearby')} />
+        </View>
+
+        <View style={styles.quickFilters}>
+          <ChoiceChip label="Age" selected={filters.ageRange[0] !== 18 || filters.ageRange[1] !== 40} onPress={openFilters} />
+          <ChoiceChip label="Gender" selected={filters.gender.length > 0} onPress={openFilters} />
+          <ChoiceChip label={`${roundDistance(filters.distance, distanceUnit)} ${distanceUnit}`} selected={filters.distance !== 25} onPress={openFilters} />
+          <ChoiceChip label={filterCount > 0 ? `More · ${filterCount}` : 'More'} selected={false} onPress={openFilters} />
+        </View>
+
+        <View
+          style={styles.deck}
+          onLayout={({ nativeEvent }: { nativeEvent: { layout: { x: number; y: number; width: number; height: number } } }) => {
+            const { width, height } = nativeEvent.layout;
+            setDeckSize((prev) => (prev?.width === width && prev?.height === height ? prev : { width, height }));
+          }}>
+          {loading ? (
+            <ThemedView type="backgroundElement" style={styles.empty}>
+              <ThemedText type="small" themeColor="textSecondary">Finding your gym partners…</ThemedText>
+            </ThemedView>
+          ) : completed ? (
+            <ThemedView type="backgroundElement" style={styles.empty}>
+              <Ionicons name="checkmark-circle-outline" size={34} color={theme.accent} />
+              <ThemedText type="default" style={styles.emptyTitle}>You’re all caught up</ThemedText>
+              <ThemedText type="small" themeColor="textSecondary">New gym partners will show up here as they join.</ThemedText>
+              <ChoiceChip label="Adjust filters" selected onPress={openFilters} />
+            </ThemedView>
+          ) : users.length === 0 ? (
+            <ThemedView type="backgroundElement" style={styles.empty}>
+              <Ionicons name="search-outline" size={34} color={theme.accent} />
+              <ThemedText type="default" style={styles.emptyTitle}>No partners match these filters</ThemedText>
+              <ThemedText type="small" themeColor="textSecondary">Try increasing your distance or widening your preferences.</ThemedText>
+              <ChoiceChip label="Adjust filters" selected onPress={openFilters} />
+            </ThemedView>
+          ) : (
+            <Swiper
+              key={`${mode}-${users.map((user) => user.id).join('-')}`}
+              ref={swiperRef}
+              cards={users}
+              renderCard={(user) => user ? (
+                <DiscoverCard
+                  user={user}
+                  onPress={() => router.push({ pathname: '/user/[id]', params: { id: user.id } })}
+                />
+              ) : <View />}
+              cardIndex={0}
+              backgroundColor="transparent"
+              // the lib sizes cards from the window (height - 2*60), which overflows the deck;
+              // measured deck size pins each card to the visible area so nothing hides behind actions/tab bar
+              cardStyle={deckSize ? { top: 0, left: 0, width: deckSize.width, height: deckSize.height } : undefined}
+              stackSize={2}
+              stackScale={5}
+              stackSeparation={8}
+              onSwipedLeft={(index) => void onSwipe(index, 'skip')}
+              onSwipedRight={(index) => void onSwipe(index, 'like')}
+              onSwipedTop={(index) => void onSwipe(index, 'super-like')}
+              onSwipedAll={() => setCompleted(true)}
+              overlayLabels={{
+                left: {
+                  title: 'PASS',
+                  // wrapper pinned to the card's right edge: the card exits left, so the right edge stays on screen
+                  style: { label: { color: theme.danger }, wrapper: { flexDirection: 'column', alignItems: 'flex-end', justifyContent: 'flex-start', marginTop: Spacing.four, marginRight: Spacing.three } },
+                },
+                right: {
+                  title: 'LIKE',
+                  style: { label: { color: theme.accent }, wrapper: { flexDirection: 'column', alignItems: 'flex-start', justifyContent: 'flex-start', marginTop: Spacing.four, marginLeft: Spacing.three } },
+                },
+                top: {
+                  title: 'SUPER LIKE',
+                  style: { label: { color: theme.accentSecondary }, wrapper: { flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-start', marginTop: Spacing.four } },
+                },
+              }}
+            />
+          )}
+        </View>
+
+        {!loading && users.length > 0 && !completed ? (
+          <View style={styles.actions}>
+            <IconButton name="close" label="Pass" variant="danger" size={58} onPress={() => swiperRef.current?.swipeLeft()} />
+            <IconButton name="barbell" label="Super like" variant="warning" size={68} onPress={() => swiperRef.current?.swipeTop()} />
+            <IconButton name="heart" label="Like" variant="primary" size={58} onPress={() => swiperRef.current?.swipeRight()} />
+          </View>
+        ) : null}
       </SafeAreaView>
 
-      {matched && (
+      {matched ? (
         <ThemedView type="backgroundElement" style={styles.matchBanner}>
-          <Ionicons name="hand-left" size={24} color={theme.text} />
-          <ThemedText>It&apos;s a match with {matched.name}!</ThemedText>
+          <Ionicons name="heart" size={20} color={theme.accent} />
+          <ThemedText type="smallBold">It’s a match with {matched.user.name}!</ThemedText>
+          <ChoiceChip label="Message" selected onPress={() => matched.matchId ? router.push({ pathname: '/chat/[id]', params: { id: matched.matchId } }) : router.push('/matches')} />
         </ThemedView>
-      )}
+      ) : null}
     </ThemedView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  safe: { flex: 1, gap: Spacing.three },
-  title: { textAlign: 'center' },
-  actions: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: Spacing.five,
-    paddingBottom: Spacing.three,
-  },
+  safe: { flex: 1, paddingHorizontal: Spacing.three, gap: Spacing.two },
+  header: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, paddingTop: Spacing.one },
+  brand: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
+  brandCopy: { gap: Spacing.half },
+  modeRow: { flexDirection: 'row', gap: Spacing.two },
+  quickFilters: { flexDirection: 'row', gap: Spacing.one, flexWrap: 'wrap' },
+  // overflow hidden clips the swiper's card stack so it never paints over the action row below
+  deck: { flex: 1, minHeight: 0, overflow: 'hidden' },
+  empty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: Spacing.four, gap: Spacing.two, borderRadius: Radius.large },
+  emptyTitle: { textAlign: 'center', fontWeight: '700' },
+  actions: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: Spacing.four, paddingVertical: Spacing.one, zIndex: 1 },
   matchBanner: {
     position: 'absolute',
-    bottom: 100,
+    left: Spacing.three,
+    right: Spacing.three,
+    bottom: 96,
     alignSelf: 'center',
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     gap: Spacing.two,
-    padding: Spacing.three,
-    borderRadius: Spacing.three,
+    padding: Spacing.two,
+    borderRadius: Radius.medium,
   },
 });
