@@ -1,12 +1,12 @@
 import { useState } from 'react';
-import { Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet } from 'react-native';
 import { Link, router } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { AuthField } from '@/components/auth-field';
+import { AuthScaffold } from '@/components/auth-scaffold';
 import { PrimaryButton } from '@/components/primary-button';
 import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Spacing } from '@/constants/theme';
+import { Radius } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { login } from '@/services/api';
 
@@ -31,49 +31,65 @@ export default function LoginScreen() {
   };
 
   return (
-    <ThemedView style={styles.container}>
-      <SafeAreaView style={styles.safe}>
-        <ThemedText type="subtitle">Welcome back</ThemedText>
-        <ThemedText themeColor="textSecondary">Log in to BarbeCue</ThemedText>
-
-        <View style={styles.form}>
-          <TextInput
-            accessibilityLabel="Email address"
-            style={[styles.input, { color: theme.text, borderColor: theme.backgroundSelected }]}
-            placeholder="Email"
-            placeholderTextColor={theme.textSecondary}
-            autoCapitalize="none"
-            keyboardType="email-address"
-            value={email}
-            onChangeText={setEmail}
-          />
-          <TextInput
-            accessibilityLabel="Password"
-            style={[styles.input, { color: theme.text, borderColor: theme.backgroundSelected }]}
-            placeholder="Password"
-            placeholderTextColor={theme.textSecondary}
-            secureTextEntry
-            value={password}
-            onChangeText={setPassword}
-          />
-          {error ? <ThemedText type="small" themeColor="danger" accessibilityRole="alert">{error}</ThemedText> : null}
-          <PrimaryButton label={submitting ? 'Logging in…' : 'Log In'} onPress={() => void onLogin()} disabled={submitting} />
-          <Link href="/(auth)/sign-up" asChild>
-            <Pressable accessibilityRole="link" accessibilityLabel="Create a new account">
-              <ThemedText type="small" themeColor="textSecondary">
-                No account? <ThemedText type="smallBold">Sign up</ThemedText>
+    <AuthScaffold
+      title="Welcome back."
+      subtitle="Log in to pick up your streak."
+      error={error}
+      action={
+        <PrimaryButton
+          label={submitting ? 'Logging in…' : 'Log In'}
+          onPress={() => void onLogin()}
+          disabled={submitting}
+          style={styles.cta}
+          leading={
+            submitting ? <ActivityIndicator size="small" color={theme.onAccent} /> : undefined
+          }
+        />
+      }
+      footer={
+        <Link href="/(auth)/sign-up" asChild>
+          <Pressable
+            accessibilityRole="link"
+            accessibilityLabel="Create an account"
+            style={styles.link}>
+            <ThemedText type="small" themeColor="textSecondary">
+              First time?{' '}
+              <ThemedText type="smallBold" style={styles.linkText}>
+                Create an account.
               </ThemedText>
-            </Pressable>
-          </Link>
-        </View>
-      </SafeAreaView>
-    </ThemedView>
+            </ThemedText>
+          </Pressable>
+        </Link>
+      }>
+      <AuthField
+        label="Email"
+        autoCapitalize="none"
+        keyboardType="email-address"
+        autoComplete="email"
+        textContentType="emailAddress"
+        value={email}
+        onChangeText={(value) => {
+          setEmail(value);
+          setError('');
+        }}
+      />
+      <AuthField
+        label="Password"
+        secure
+        autoComplete="current-password"
+        textContentType="password"
+        value={password}
+        onChangeText={(value) => {
+          setPassword(value);
+          setError('');
+        }}
+      />
+    </AuthScaffold>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  safe: { flex: 1, justifyContent: 'center', gap: Spacing.two, padding: Spacing.four },
-  form: { gap: Spacing.three, marginTop: Spacing.four },
-  input: { borderWidth: 1, borderRadius: Spacing.three, paddingHorizontal: Spacing.three, paddingVertical: Spacing.three },
+  cta: { alignSelf: 'flex-start', minWidth: 220, borderRadius: Radius.small },
+  link: { minHeight: 44, justifyContent: 'center' },
+  linkText: { textDecorationLine: 'underline' },
 });

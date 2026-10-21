@@ -1,12 +1,12 @@
 import { useState } from 'react';
-import { Pressable, StyleSheet, TextInput, View, type TextStyle } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet } from 'react-native';
 import { Link, router } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { AuthField } from '@/components/auth-field';
+import { AuthScaffold } from '@/components/auth-scaffold';
 import { PrimaryButton } from '@/components/primary-button';
 import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Spacing } from '@/constants/theme';
+import { Radius } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { signUp } from '@/services/api';
 
@@ -16,7 +16,10 @@ export default function SignUpScreen() {
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  const set = (key: keyof typeof form) => (v: string) => setForm((f) => ({ ...f, [key]: v }));
+  const set = (key: keyof typeof form) => (value: string) => {
+    setForm((current) => ({ ...current, [key]: value }));
+    setError('');
+  };
 
   const onSignUp = async () => {
     if (!form.name.trim()) return setError('Name is required');
@@ -39,40 +42,73 @@ export default function SignUpScreen() {
     }
   };
 
-  const inputStyle: TextStyle = StyleSheet.flatten([
-    styles.input,
-    { color: theme.text, borderColor: theme.backgroundSelected },
-  ]);
-
   return (
-    <ThemedView style={styles.container}>
-      <SafeAreaView style={styles.safe}>
-        <ThemedText type="subtitle">Create account</ThemedText>
-        <ThemedText themeColor="textSecondary">Find your training crew</ThemedText>
-
-        <View style={styles.form}>
-          <TextInput accessibilityLabel="Full name" style={inputStyle} placeholder="Full Name" placeholderTextColor={theme.textSecondary} autoComplete="name" value={form.name} onChangeText={set('name')} />
-          <TextInput accessibilityLabel="Email address" style={inputStyle} placeholder="Email" placeholderTextColor={theme.textSecondary} autoCapitalize="none" keyboardType="email-address" autoComplete="email" value={form.email} onChangeText={set('email')} />
-          <TextInput accessibilityLabel="Password" style={inputStyle} placeholder="Password (min 6 chars)" placeholderTextColor={theme.textSecondary} secureTextEntry autoComplete="new-password" value={form.password} onChangeText={set('password')} />
-          <TextInput accessibilityLabel="Date of birth" style={inputStyle} placeholder="Date of Birth (YYYY-MM-DD)" placeholderTextColor={theme.textSecondary} value={form.dob} onChangeText={set('dob')} />
-          {error ? <ThemedText type="small" themeColor="danger" accessibilityRole="alert">{error}</ThemedText> : null}
-          <PrimaryButton label={submitting ? 'Creating account…' : 'Sign Up'} onPress={() => void onSignUp()} disabled={submitting} />
-          <Link href="/(auth)/login" asChild>
-            <Pressable accessibilityRole="link" accessibilityLabel="Log in to your account">
-              <ThemedText type="small" themeColor="textSecondary">
-                Already have an account? <ThemedText type="smallBold">Log in</ThemedText>
+    <AuthScaffold
+      title="Pull up a bench."
+      subtitle="Create your account and find your training partner."
+      error={error}
+      action={
+        <PrimaryButton
+          label={submitting ? 'Signing up…' : 'Sign Up'}
+          onPress={() => void onSignUp()}
+          disabled={submitting}
+          style={styles.cta}
+          leading={
+            submitting ? <ActivityIndicator size="small" color={theme.onAccent} /> : undefined
+          }
+        />
+      }
+      footer={
+        <Link href="/(auth)/login" asChild>
+          <Pressable
+            accessibilityRole="link"
+            accessibilityLabel="Log in to your account"
+            style={styles.link}>
+            <ThemedText type="small" themeColor="textSecondary">
+              Already with us?{' '}
+              <ThemedText type="smallBold" style={styles.linkText}>
+                Log in.
               </ThemedText>
-            </Pressable>
-          </Link>
-        </View>
-      </SafeAreaView>
-    </ThemedView>
+            </ThemedText>
+          </Pressable>
+        </Link>
+      }>
+      <AuthField
+        label="Full name"
+        autoComplete="name"
+        textContentType="name"
+        value={form.name}
+        onChangeText={set('name')}
+      />
+      <AuthField
+        label="Email"
+        autoCapitalize="none"
+        keyboardType="email-address"
+        autoComplete="email"
+        textContentType="emailAddress"
+        value={form.email}
+        onChangeText={set('email')}
+      />
+      <AuthField
+        label="Password"
+        secure
+        autoComplete="new-password"
+        textContentType="newPassword"
+        value={form.password}
+        onChangeText={set('password')}
+      />
+      <AuthField
+        label="Date of birth"
+        placeholder="YYYY-MM-DD"
+        value={form.dob}
+        onChangeText={set('dob')}
+      />
+    </AuthScaffold>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  safe: { flex: 1, justifyContent: 'center', gap: Spacing.two, padding: Spacing.four },
-  form: { gap: Spacing.three, marginTop: Spacing.four },
-  input: { borderWidth: 1, borderRadius: Spacing.three, paddingHorizontal: Spacing.three, paddingVertical: Spacing.three },
+  cta: { alignSelf: 'flex-start', minWidth: 220, borderRadius: Radius.small },
+  link: { minHeight: 44, justifyContent: 'center' },
+  linkText: { textDecorationLine: 'underline' },
 });
