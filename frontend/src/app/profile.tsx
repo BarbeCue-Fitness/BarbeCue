@@ -5,6 +5,7 @@ import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ChoiceChip } from '@/components/choice-chip';
+import { PageHeader } from '@/components/page-header';
 import { PrimaryButton } from '@/components/primary-button';
 import { ProfileAvatar } from '@/components/profile-avatar';
 import { ThemedText } from '@/components/themed-text';
@@ -29,13 +30,16 @@ export default function ProfileScreen() {
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safe} edges={['top']}>
         <ScrollView contentContainerStyle={styles.content}>
-          <View style={styles.header}>
-            <ThemedText type="heading">My Profile</ThemedText>
-            <Pressable accessibilityRole="button" accessibilityLabel="Open Premium" onPress={() => router.push('/premium')} style={[styles.premium, { backgroundColor: theme.backgroundSelected }]}>
-              <Ionicons name="trophy-outline" size={17} color={theme.accentSecondary} />
-              <ThemedText type="smallBold" style={{ color: theme.accentSecondary }}>Premium</ThemedText>
-            </Pressable>
-          </View>
+          <PageHeader
+            title="My Profile"
+            onBack={() => router.back()}
+            right={
+              <Pressable accessibilityRole="button" accessibilityLabel="Open Premium" onPress={() => router.push('/premium')} style={[styles.premium, { backgroundColor: theme.backgroundSelected }]}>
+                <Ionicons name="trophy-outline" size={17} color={theme.accentSecondary} />
+                <ThemedText type="smallBold" style={{ color: theme.accentSecondary }}>Premium</ThemedText>
+              </Pressable>
+            }
+          />
 
           <ThemedView type="backgroundElement" style={[styles.profileCard, { borderColor: theme.border }]}>
             <Image source={{ uri: me.photos[0] ?? me.avatar }} style={[styles.cover, { backgroundColor: theme.imagePlaceholder }]} resizeMode="cover" accessibilityLabel="Your profile cover photo" />
@@ -92,7 +96,6 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   safe: { flex: 1 },
   content: { padding: Spacing.three, gap: Spacing.three, paddingBottom: Spacing.four },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   premium: { minHeight: 40, flexDirection: 'row', alignItems: 'center', gap: Spacing.one, paddingHorizontal: Spacing.two, borderRadius: Radius.round },
   profileCard: { borderWidth: StyleSheet.hairlineWidth, borderRadius: Radius.large, overflow: 'hidden', paddingBottom: Spacing.three, gap: Spacing.two },
   cover: { width: '100%', height: 190 },

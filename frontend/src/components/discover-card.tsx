@@ -12,9 +12,12 @@ import { ThemedText } from './themed-text';
 export function DiscoverCard({
   user,
   onPress,
+  bottomInset = 0,
 }: {
   user: User;
   onPress: () => void;
+  /** space kept clear at the bottom for the floating action buttons */
+  bottomInset?: number;
 }) {
   const theme = useTheme();
   const { distanceUnit } = useSettings();
@@ -44,7 +47,7 @@ export function DiscoverCard({
         <ThemedText type="small" themeColor="onImage">{user.activeNow ? 'Active now' : 'Recently active'}</ThemedText>
       </View>
 
-      <View style={styles.photoIdentity}>
+      <View style={[styles.photoIdentity, { bottom: 236 + bottomInset }]}>
         <View style={styles.nameRow}>
           <ThemedText type="subtitle" themeColor="onImage">{user.name}, {user.age}</ThemedText>
           {user.verified ? <Ionicons name="checkmark-circle" size={22} color={theme.accentSecondary} /> : null}
@@ -58,7 +61,7 @@ export function DiscoverCard({
         </View>
       </View>
 
-      <View style={[styles.promptCard, { backgroundColor: theme.backgroundElement }]}>
+      <View style={[styles.promptCard, { backgroundColor: theme.backgroundElement, bottom: Spacing.two + bottomInset }]}>
         <View style={styles.promptHeader}>
           <Ionicons name="barbell" size={17} color={theme.accent} />
           <ThemedText type="small" themeColor="textSecondary">Looking for</ThemedText>

@@ -16,6 +16,8 @@ function RootNavigator() {
         <Stack.Screen name="more-filters" />
         <Stack.Screen name="color-theme" />
         <Stack.Screen name="premium" />
+        <Stack.Screen name="nutrition" />
+        <Stack.Screen name="profile" />
         <Stack.Screen name="user/[id]" />
         <Stack.Screen name="chat/[id]" />
         <Stack.Screen name="(auth)" />

@@ -1,4 +1,4 @@
-import type { Match, Message, User } from '@/types';
+import type { Match, Message, Progress, User } from '@/types';
 
 const photo = (id: number) => `https://i.pravatar.cc/600?img=${id}`;
 
@@ -260,6 +260,35 @@ export const MOCK_MESSAGES: Message[] = [
     read: true,
   },
 ];
+
+export const MOCK_PROGRESS: Progress = {
+  streakDays: 6,
+  training: [
+    { day: 'Mon', minutes: 45, sessions: 1 },
+    { day: 'Tue', minutes: 0, sessions: 0 },
+    { day: 'Wed', minutes: 60, sessions: 1 },
+    { day: 'Thu', minutes: 30, sessions: 1 },
+    { day: 'Fri', minutes: 55, sessions: 1 },
+    { day: 'Sat', minutes: 0, sessions: 0 },
+    { day: 'Sun', minutes: 40, sessions: 1 },
+  ],
+  weight: [
+    { week: 'W1', kg: 82.4 },
+    { week: 'W2', kg: 82.0 },
+    { week: 'W3', kg: 81.5 },
+    { week: 'W4', kg: 81.6 },
+    { week: 'W5', kg: 80.9 },
+    { week: 'W6', kg: 80.2 },
+  ],
+  activity: [
+    { week: 'W1', likes: 9, matches: 3 },
+    { week: 'W2', likes: 11, matches: 4 },
+    { week: 'W3', likes: 7, matches: 2 },
+    { week: 'W4', likes: 14, matches: 5 },
+    { week: 'W5', likes: 10, matches: 4 },
+    { week: 'W6', likes: 12, matches: 6 },
+  ],
+};
 
 export const CURRENT_USER: User = {
   id: 'me',

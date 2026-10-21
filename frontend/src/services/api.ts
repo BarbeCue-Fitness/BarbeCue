@@ -5,9 +5,9 @@
  */
 import { create as axiosCreate } from 'axios';
 
-import type { AuthUser, Filters, Match, Message, SwipeAction, User } from '@/types';
+import type { AuthUser, Filters, Match, Message, Progress, SwipeAction, User } from '@/types';
 import { PREFER_NOT_TO_SAY } from '@/constants/filters';
-import { CURRENT_USER, MOCK_LIKES_YOU, MOCK_MATCHES, MOCK_MESSAGES, MOCK_USERS } from './mock-data';
+import { CURRENT_USER, MOCK_LIKES_YOU, MOCK_MATCHES, MOCK_MESSAGES, MOCK_PROGRESS, MOCK_USERS } from './mock-data';
 
 export const api = axiosCreate({
   baseURL: process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3000/api',
@@ -76,7 +76,10 @@ export async function getDiscoverUsers(filters?: Partial<Filters>): Promise<User
   if (!filters) return MOCK_USERS;
 
   const [minAge, maxAge] = filters.ageRange ?? [18, 99];
+  // people you already matched with must not come back in the deck
+  const matchedIds = new Set(MOCK_MATCHES.map((match) => match.user.id));
   return MOCK_USERS.filter((user) => {
+    if (matchedIds.has(user.id)) return false;
     const height = user.height?.match(/(\d+)[’']\s*(\d+)/);
     const heightInches = height ? Number(height[1]) * 12 + Number(height[2]) : undefined;
     const heightCategory = heightInches === undefined
@@ -147,7 +150,8 @@ export async function getUserById(userId: string): Promise<User | undefined> {
 export async function getLikesYou(): Promise<User[]> {
   await delay();
   // TODO backend: GET /matches/likes-you
-  return MOCK_LIKES_YOU;
+  const matchedIds = new Set(MOCK_MATCHES.map((match) => match.user.id));
+  return MOCK_LIKES_YOU.filter((user) => !matchedIds.has(user.id));
 }
 
 export async function getMessages(matchId: string): Promise<Message[]> {
@@ -190,4 +194,12 @@ export async function getMyProfile(): Promise<User> {
   await delay();
   // TODO backend: GET /me
   return CURRENT_USER;
+}
+
+/* ---------------- Progress ---------------- */
+
+export async function getProgress(): Promise<Progress> {
+  await delay();
+  // TODO backend: GET /me/progress
+  return MOCK_PROGRESS;
 }

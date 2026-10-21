@@ -69,3 +69,13 @@ export interface AuthUser {
   email: string;
   token: string;
 }
+
+export interface Progress {
+  streakDays: number;
+  /** One entry per day, oldest first. */
+  training: { day: string; minutes: number; sessions: number }[];
+  /** One entry per week, oldest first. */
+  weight: { week: string; kg: number }[];
+  /** One entry per week, oldest first. */
+  activity: { week: string; likes: number; matches: number }[];
+}

@@ -35,11 +35,11 @@ export default function AppTabs() {
         />
       </NativeTabs.Trigger>
 
-      <NativeTabs.Trigger name="profile">
-        <NativeTabs.Trigger.Label>Profile</NativeTabs.Trigger.Label>
+      <NativeTabs.Trigger name="progress">
+        <NativeTabs.Trigger.Label>Progress</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon
-          sf={{ default: 'person', selected: 'person.fill' }}
-          md={{ default: 'person_outline', selected: 'person' }}
+          sf={{ default: 'chart.bar', selected: 'chart.bar.fill' }}
+          md={{ default: 'bar_chart', selected: 'bar_chart' }}
         />
       </NativeTabs.Trigger>
 

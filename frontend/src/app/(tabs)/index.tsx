@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Animated, ScrollView, StyleSheet, View } from 'react-native';
+import Reanimated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Swiper from 'react-native-deck-swiper';
@@ -20,6 +21,9 @@ import type { SwipeAction, User } from '@/types';
 
 type DiscoveryMode = 'nearby' | 'standouts';
 
+/** height of the floating action row that sits over the card's photo */
+const ACTION_INSET = 84;
+
 export default function DiscoverScreen() {
   const router = useRouter();
   const theme = useTheme();
@@ -33,6 +37,17 @@ export default function DiscoverScreen() {
   const [matchCount, setMatchCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [completed, setCompleted] = useState(false);
+  const [optionsOpen, setOptionsOpen] = useState(false);
+  const [gear] = useState(() => new Animated.Value(0));
+  const gearSpin = gear.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '180deg'] });
+  const matchOpacity = useSharedValue(1);
+  const matchBannerStyle = useAnimatedStyle(() => ({ opacity: matchOpacity.value }));
+
+  const toggleOptions = () => {
+    const next = !optionsOpen;
+    setOptionsOpen(next);
+    Animated.timing(gear, { toValue: next ? 1 : 0, duration: 260, useNativeDriver: true }).start();
+  };
 
   useEffect(() => {
     let active = true;
@@ -51,14 +66,23 @@ export default function DiscoverScreen() {
     const user = users[index];
     if (!user) return;
     const result = await sendSwipe({ userId: user.id, action, timestamp: new Date().toISOString() });
-    if (result.matched) setMatched({ user, matchId: result.matchId });
+    if (result.matched) {
+      setMatched({ user, matchId: result.matchId });
+      setMatchCount((count) => count + 1);
+    }
   };
 
   useEffect(() => {
     if (!matched) return;
-    const timer = setTimeout(() => setMatched(null), 3000);
-    return () => clearTimeout(timer);
-  }, [matched]);
+    // eslint-disable-next-line react-hooks/immutability -- Reanimated shared values are mutable by design
+    matchOpacity.value = 1;
+    const timer = setTimeout(() => {
+      matchOpacity.value = withTiming(0, { duration: 300 });
+    }, 2000);
+    // unmount just after the fade so it never pops out mid-animation
+    const hide = setTimeout(() => setMatched(null), 2320);
+    return () => { clearTimeout(timer); clearTimeout(hide); };
+  }, [matched, matchOpacity]);
 
   const openFilters = () => {
     beginEditing();
@@ -83,19 +107,6 @@ export default function DiscoverScreen() {
             </View>
           </View>
           <ChoiceChip label={`Matches ${matchCount}`} selected={false} onPress={() => router.push('/matches')} />
-          <IconButton name="options-outline" label="Open filters" onPress={openFilters} />
-        </View>
-
-        <View style={styles.modeRow}>
-          <ChoiceChip label="Standouts" selected={mode === 'standouts'} onPress={() => setMode('standouts')} />
-          <ChoiceChip label="Nearby" selected={mode === 'nearby'} onPress={() => setMode('nearby')} />
-        </View>
-
-        <View style={styles.quickFilters}>
-          <ChoiceChip label="Age" selected={filters.ageRange[0] !== 18 || filters.ageRange[1] !== 40} onPress={openFilters} />
-          <ChoiceChip label="Gender" selected={filters.gender.length > 0} onPress={openFilters} />
-          <ChoiceChip label={`${roundDistance(filters.distance, distanceUnit)} ${distanceUnit}`} selected={filters.distance !== 25} onPress={openFilters} />
-          <ChoiceChip label={filterCount > 0 ? `More · ${filterCount}` : 'More'} selected={false} onPress={openFilters} />
         </View>
 
         <View
@@ -130,6 +141,7 @@ export default function DiscoverScreen() {
               renderCard={(user) => user ? (
                 <DiscoverCard
                   user={user}
+                  bottomInset={ACTION_INSET}
                   onPress={() => router.push({ pathname: '/user/[id]', params: { id: user.id } })}
                 />
               ) : <View />}
@@ -162,10 +174,32 @@ export default function DiscoverScreen() {
               }}
             />
           )}
+          {optionsOpen ? (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.optionsRow}
+              contentContainerStyle={styles.optionsContent}>
+              <ChoiceChip label="Standouts" selected={mode === 'standouts'} onPress={() => setMode('standouts')} />
+              <ChoiceChip label="Nearby" selected={mode === 'nearby'} onPress={() => setMode('nearby')} />
+              <ChoiceChip label="Age" selected={filters.ageRange[0] !== 18 || filters.ageRange[1] !== 40} onPress={openFilters} />
+              <ChoiceChip label="Gender" selected={filters.gender.length > 0} onPress={openFilters} />
+              <ChoiceChip label={`${roundDistance(filters.distance, distanceUnit)} ${distanceUnit}`} selected={filters.distance !== 25} onPress={openFilters} />
+              <ChoiceChip label={filterCount > 0 ? `More · ${filterCount}` : 'More'} selected={false} onPress={openFilters} />
+            </ScrollView>
+          ) : null}
+          <Animated.View style={[styles.menuButton, { transform: [{ rotate: gearSpin }] }]}>
+            <IconButton
+              name="menu"
+              label={optionsOpen ? 'Hide options' : 'Show options'}
+              size={44}
+              onPress={toggleOptions}
+            />
+          </Animated.View>
         </View>
 
         {!loading && users.length > 0 && !completed ? (
-          <View style={styles.actions}>
+          <View style={styles.actions} pointerEvents="box-none">
             <IconButton name="close" label="Pass" variant="danger" size={58} onPress={() => swiperRef.current?.swipeLeft()} />
             <IconButton name="barbell" label="Super like" variant="warning" size={68} onPress={() => swiperRef.current?.swipeTop()} />
             <IconButton name="heart" label="Like" variant="primary" size={58} onPress={() => swiperRef.current?.swipeRight()} />
@@ -174,11 +208,11 @@ export default function DiscoverScreen() {
       </SafeAreaView>
 
       {matched ? (
-        <ThemedView type="backgroundElement" style={styles.matchBanner}>
+        <Reanimated.View style={[styles.matchBanner, { backgroundColor: theme.backgroundElement }, matchBannerStyle]}>
           <Ionicons name="heart" size={20} color={theme.accent} />
           <ThemedText type="smallBold">It’s a match with {matched.user.name}!</ThemedText>
           <ChoiceChip label="Message" selected onPress={() => matched.matchId ? router.push({ pathname: '/chat/[id]', params: { id: matched.matchId } }) : router.push('/matches')} />
-        </ThemedView>
+        </Reanimated.View>
       ) : null}
     </ThemedView>
   );
@@ -190,13 +224,34 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, paddingTop: Spacing.one },
   brand: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
   brandCopy: { gap: Spacing.half },
-  modeRow: { flexDirection: 'row', gap: Spacing.two },
-  quickFilters: { flexDirection: 'row', gap: Spacing.one, flexWrap: 'wrap' },
   // overflow hidden clips the swiper's card stack so it never paints over the action row below
   deck: { flex: 1, minHeight: 0, overflow: 'hidden' },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: Spacing.four, gap: Spacing.two, borderRadius: Radius.large },
   emptyTitle: { textAlign: 'center', fontWeight: '700' },
-  actions: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: Spacing.four, paddingVertical: Spacing.one, zIndex: 1 },
+  // transparent overlay: the photo runs edge to edge behind the buttons
+  actions: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: Spacing.four,
+    paddingVertical: Spacing.two,
+    zIndex: 1,
+  },
+  // pinned to the card's top-left corner, on the same line as the options chips when they open
+  menuButton: { position: 'absolute', top: Spacing.one, left: Spacing.one, zIndex: 3 },
+  // single line of mode + filter chips, hidden until the menu button is pressed
+  optionsRow: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 2,
+  },
+  optionsContent: { paddingVertical: Spacing.one, paddingLeft: 60, gap: Spacing.one, alignItems: 'center' },
   matchBanner: {
     position: 'absolute',
     left: Spacing.three,
