@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GymMatch — Popups</title>
+<style>
+  :root { --ink:#1C1C1E; --mist:#8A8A8E; --line:#E5E5EA; }
+  * { margin:0; box-sizing:border-box; }
+  body {
+    background:#F2F2F5; color:var(--ink); padding:40px 24px;
+    font-family:-apple-system,"Segoe UI",system-ui,sans-serif;
+    display:flex; flex-wrap:wrap; gap:40px; justify-content:center;
+  }
+  .phone {
+    width:272px; height:584px; border:2px solid var(--line);
+    border-radius:28px; background:#fff; overflow:hidden; position:relative;
+  }
+  .backdrop { position:absolute; inset:0; background:rgba(28,28,30,.45); }
+  .card {
+    position:absolute; left:16px; right:16px; background:#fff;
+    border-radius:20px; padding:24px 20px; text-align:center;
+  }
+  .card h2 { font-size:19px; letter-spacing:-.3px; margin-top:12px; }
+  .card .sub { color:var(--mist); font-size:12.5px; line-height:1.55; margin-top:8px; }
+  .pill {
+    display:block; width:100%; border:0; cursor:pointer;
+    background:var(--ink); color:#fff; border-radius:22px;
+    padding:12px; font-size:14px; font-weight:600;
+    font-family:inherit; margin-top:18px;
+  }
+  .ghost { display:block; background:none; border:0; cursor:pointer;
+    color:var(--mist); font-family:inherit; font-size:13px; font-weight:600;
+    margin:12px auto 0; padding:6px; }
+  .badge { width:56px; height:56px; border-radius:50%; background:#fff;
+    display:grid; place-items:center; margin:0 auto;
+    box-shadow:0 4px 16px rgba(28,28,30,.12); }
+  .badge svg { width:30px; height:30px; color:var(--ink); }
+  /* premium */
+  .premium { bottom:24px; }
+  .price { font-size:13px; font-weight:600; margin-top:14px; background:#F7F7F9;
+    border-radius:12px; padding:10px; }
+  .price span { display:block; font-weight:400; color:var(--mist); font-size:11.5px; margin-top:2px; }
+  /* match */
+  .match { top:150px; }
+  .avatars { display:flex; justify-content:center; margin-top:8px; }
+  .avatar { width:74px; height:74px; border-radius:50%; background:#E8E8ED;
+    display:grid; place-items:center; border:4px solid #fff; }
+  .avatar + .avatar { margin-left:-14px; }
+  .avatar svg { width:32px; height:32px; color:#ABABB0; }
+  .match .badge { position:absolute; top:88px; left:50%; transform:translateX(-50%); width:44px; height:44px; }
+  .match .badge svg { width:24px; height:24px; }
+  .match h2 { margin-top:20px; }
+  .duo { margin-top:14px; }
+  /* toast */
+  .toast {
+    position:absolute; left:40px; right:40px; bottom:36px;
+    background:var(--ink); color:#fff; border-radius:22px;
+    padding:11px; text-align:center; font-size:13px; font-weight:600;
+  }
+  .sheet-header { text-align:center; color:var(--mist); font-size:12px; margin-top:20px; letter-spacing:.4px; text-transform:uppercase; }
+  @media (prefers-reduced-motion: no-preference) {
+    .card, .toast { animation: rise .28s ease-out both; }
+    @keyframes rise { from { transform:translateY(14px); opacity:0 } to { transform:none; opacity:1 } }
+  }
+</style>
+</head>
+<body>
+
+  <!-- 1. Go Premium -->
+  <div>
+    <p class="sheet-header">Premium</p>
+    <div class="phone">
+      <div class="backdrop"></div>
+      <div class="card premium">
+        <div class="badge">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M5 17.5 4 8l4.5 3 3.5-5.5L15.5 11 20 8l-1 9.5Z"/>
+          </svg>
+        </div>
+        <h2>Go Premium</h2>
+        <p class="sub">Unlock ethnicity &amp; distance filters, see who liked you, and boost your profile to the top.</p>
+        <div class="price">$9.99 / month <span>Cancel anytime</span></div>
+        <button class="pill">Go Premium</button>
+        <button class="ghost">Restore Purchase</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2. Match success -->
+  <div>
+    <p class="sheet-header">You Matched</p>
+    <div class="phone">
+      <div class="backdrop"></div>
+      <div class="card match">
+        <div class="avatars">
+          <div class="avatar">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+              <circle cx="12" cy="8" r="4"/><path d="M4.5 20c0-3.9 3.4-6.3 7.5-6.3s7.5 2.4 7.5 6.3"/>
+            </svg>
+          </div>
+          <div class="avatar">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+              <circle cx="12" cy="8" r="4"/><path d="M4.5 20c0-3.9 3.4-6.3 7.5-6.3s7.5 2.4 7.5 6.3"/>
+            </svg>
+          </div>
+        </div>
+        <div class="badge">
+          <svg viewBox="0 0 64 64" fill="currentColor" aria-hidden="true">
+            <rect x="2" y="15" width="11" height="34" rx="5.5"/>
+            <rect x="51" y="15" width="11" height="34" rx="5.5"/>
+            <rect x="15" y="21" width="5" height="22" rx="2.5"/>
+            <rect x="44" y="21" width="5" height="22" rx="2.5"/>
+            <rect x="19" y="29.5" width="26" height="5" rx="2.5"/>
+            <path d="M19 31a13 13 0 0 1 26 0Z"/>
+            <rect x="22" y="31" width="20" height="9" rx="4"/>
+            <rect x="29" y="14.5" width="6" height="5" rx="2.5"/>
+            <rect x="25" y="38" width="3" height="9" rx="1.5" transform="rotate(12 26.5 38)"/>
+            <rect x="36" y="38" width="3" height="9" rx="1.5" transform="rotate(-12 37.5 38)"/>
+            <g fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+              <path d="M24.5 13c1.6-2 .2-3.6 1.4-5.6"/>
+              <path d="M39.5 13c-1.6-2-.2-3.6-1.4-5.6"/>
+            </g>
+            <path d="M20.5 31h23" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round" fill="none"/>
+          </svg>
+        </div>
+        <h2>You Matched!</h2>
+        <p class="sub">You and Riya both want a 6 AM gym partner. Say hi and plan your first workout.</p>
+        <button class="pill">Say Hi</button>
+        <button class="ghost">Keep Browsing</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3. Toast -->
+  <div>
+    <p class="sheet-header">Toast</p>
+    <div class="phone">
+      <div class="toast">Filters applied</div>
+    </div>
+  </div>
+
+</body>
+</html>
+

@@ -1,0 +1,10 @@
+<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Chat">
+  <g stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 11.5C4 7.6 7.6 4.5 12 4.5s8 3.1 8 7-3.6 7-8 7c-1 0-2-.14-2.9-.4L5.5 19.2l1-3.1C5.1 14.9 4 13.3 4 11.5Z"/>
+  </g>
+  <g fill="currentColor" stroke="none">
+    <circle cx="8.8" cy="12" r="1.1"/>
+    <circle cx="12" cy="12" r="1.1"/>
+    <circle cx="15.2" cy="12" r="1.1"/>
+  </g>
+</svg>

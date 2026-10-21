@@ -1,0 +1,19 @@
+<svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="BarbeCue monochrome adaptive icon">
+  <g fill="#0B0B0C" transform="translate(90,109) scale(5.2)">
+    <rect x="2" y="15" width="11" height="34" rx="5.5"/>
+    <rect x="51" y="15" width="11" height="34" rx="5.5"/>
+    <rect x="15" y="21" width="5" height="22" rx="2.5"/>
+    <rect x="44" y="21" width="5" height="22" rx="2.5"/>
+    <rect x="19" y="29.5" width="26" height="5" rx="2.5"/>
+    <path d="M19 31a13 13 0 0 1 26 0Z"/>
+    <rect x="22" y="31" width="20" height="9" rx="4"/>
+    <rect x="29" y="14.5" width="6" height="5" rx="2.5"/>
+    <rect x="25" y="38" width="3" height="9" rx="1.5" transform="rotate(12 26.5 38)"/>
+    <rect x="36" y="38" width="3" height="9" rx="1.5" transform="rotate(-12 37.5 38)"/>
+    <g fill="none" stroke="#0B0B0C" stroke-width="2.2" stroke-linecap="round">
+      <path d="M24.5 13c1.6-2 .2-3.6 1.4-5.6"/>
+      <path d="M39.5 13c-1.6-2-.2-3.6-1.4-5.6"/>
+    </g>
+    <path d="M20.5 31h23" stroke="#0B0B0C" stroke-width="2.2" stroke-linecap="round" fill="none"/>
+  </g>
+</svg>
