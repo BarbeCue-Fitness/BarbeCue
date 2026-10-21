@@ -8,6 +8,7 @@
     "scheme": "barbecue",
     "userInterfaceStyle": "automatic",
     "android": {
+      "package": "com.barbecue.app",
       "adaptiveIcon": {
         "backgroundColor": "#0B0B0C",
         "foregroundImage": "./assets/branding/adaptive-foreground.png",
@@ -35,6 +36,13 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "ee169575-147c-420a-9dde-71f29742c865"
+      }
+    },
+    "owner": "crustin"
   }
 }
