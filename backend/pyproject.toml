@@ -1,0 +1,36 @@
+[project]
+name = "barbecue-backend"
+version = "0.1.0"
+requires-python = ">= 3.12"
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "sqlalchemy>=2.0",
+    "alembic",
+    "pydantic>=2",
+    "pydantic-settings",
+    "python-multipart",
+    "pyjwt",
+    "argon2-cffi",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "httpx", "ruff"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["app", "app.routers"]
+
+[tool.ruff]
+line-length = 140
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W", "B"]
+ignore = ["B008"]  # Depends() in defaults is the idiomatic FastAPI pattern
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -1,0 +1,11 @@
+.venv/
+*.egg-info/
+build/
+barbecue.db
+barbecue.db-shm
+barbecue.db-wal
+uploads/
+.env
+__pycache__/
+.pytest_cache/
+.ruff_cache/
