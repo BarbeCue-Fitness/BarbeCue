@@ -33,6 +33,8 @@ Point the app at this server with `EXPO_PUBLIC_API_URL=http://localhost:8000/api
 | `DATABASE_URL` | `sqlite+pysqlite:///./barbecue.db` | swap for Postgres/Supabase URL later |
 | `JWT_SECRET` | insecure placeholder | set a 32+ char secret in any real deployment |
 | `CORS_ORIGINS` | localhost:8081/19006 | comma-separated allow-list |
+| `GEMINI_API_KEY` | *(empty)* | enables `POST /nutrition/scan`; empty = feature disabled (endpoint → 503) |
+| `NUTRITION_DAILY_LIMIT` | `10` | scans per user per UTC day (quota enforced via `nutrition_scans`) |
 
 ## Tests / lint
 
@@ -40,6 +42,12 @@ Point the app at this server with `EXPO_PUBLIC_API_URL=http://localhost:8000/api
 .venv/bin/pytest
 .venv/bin/ruff check .
 ```
+
+## Nutrition scanner
+
+`POST /api/v1/nutrition/scan` (auth): meal photo as base64 → Gemini vision analysis → items + totals.
+Gemini key lives **server-side only** (`GEMINI_API_KEY`); the phone never sees it. Best documented
+contract (with request/response examples): the Swagger UI at `/api/v1/docs` → the `nutrition` section.
 
 ## Conventions
 

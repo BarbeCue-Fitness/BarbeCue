@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from .config import settings
-from .routers import auth, discover, matches, me, safety, users
+from .routers import auth, discover, matches, me, nutrition, safety, users
 
 app = FastAPI(title="BarbeCue API", version="1.0.0", docs_url="/api/v1/docs")
 
@@ -24,6 +24,7 @@ app.include_router(discover.router, prefix=API)
 app.include_router(matches.router, prefix=API)
 app.include_router(safety.router, prefix=API)
 app.include_router(users.router, prefix=API)
+app.include_router(nutrition.router, prefix=API)
 
 # uploaded photos (pilot: local disk; swap for object storage later without touching the DB URLs)
 app.mount(f"{API}/media", StaticFiles(directory=settings.uploads_path), name="media")

@@ -243,3 +243,62 @@ def test_media_upload(client, db):
     assert client.get(url).status_code == 200
     # wrong mime rejected
     assert client.post("/api/v1/media", headers=auth, files={"file": ("a.exe", b"x", "application/octet-stream")}).status_code == 415
+
+
+# ---------- Nutrition scanner ----------
+
+# what the (mocked) Gemini call returns: model fields before deterministic DB-backed scaling
+FAKE_GEMINI = {"items": [{"name": "roti / chapati", "grams": 180, "k": 0, "p2": 0, "c2": 0, "f2": 0, "fb": 0, "conf": "HIGH"}]}
+JPEG_BYTES = "data:image/jpeg;base64,/9j/4AAAAAAAAAAAAAAAAAAAAAA="
+
+
+def test_nutrition_disabled_without_key(client, db, monkeypatch):
+    auth = auth_header(db, make_user(db, "Nutty"))
+    monkeypatch.setattr("app.config.settings.gemini_api_key", "")
+    response = client.post("/api/v1/nutrition/scan", headers=auth, json={"imageBase64": "xxx"})
+    assert response.status_code == 503
+    assert client.get("/api/v1/nutrition/usage", headers=auth).json()["scansUsed"] == 0
+
+
+def test_nutrition_scan_quota_and_auth(client, db, monkeypatch):
+    me = make_user(db, "ScanUser")
+    auth = auth_header(db, me)
+    monkeypatch.setattr("app.config.settings.gemini_api_key", "test-key")
+    monkeypatch.setattr("app.nutrition._call_once", lambda data, mime: FAKE_GEMINI)
+
+    # undecodable images → 422, quota untouched
+    for garbage in ("bm90IGFuIGltYWdl", "!!!notb64!!!", "data:image/jpeg;base64,bm90IGFuIGltYWdl"):
+        assert client.post("/api/v1/nutrition/scan", headers=auth, json={"imageBase64": garbage}).status_code == 422, garbage
+    assert client.get("/api/v1/nutrition/usage", headers=auth).json()["scansUsed"] == 0
+
+    # valid jpeg magic: data-URL accepted, item matched against the DB food table
+    first = client.post("/api/v1/nutrition/scan", headers=auth, json={"imageBase64": JPEG_BYTES})
+    assert first.status_code == 200, first.text
+    body = first.json()
+    assert body["scanId"] and body["scansUsed"] == 1 and body["scansRemaining"] == 9
+    assert body["items"][0]["source"] == "DB" and body["totals"]["kcal"] == 504
+    stored = client.get("/api/v1/nutrition/history", headers=auth).json()
+    assert stored[0]["scanId"] == body["scanId"] and stored[0]["items"] == body["items"]
+    assert client.get(f"/api/v1/nutrition/history?scanId={body['scanId']}", headers=auth).json()[0]["items"][0]["name"] == "roti / chapati"
+
+    # 9 more scans fill the quota; the 11th is 429 with a Retry-After header
+    for used in range(2, 11):
+        response = client.post("/api/v1/nutrition/scan", headers=auth, json={"imageBase64": JPEG_BYTES})
+        assert response.json()["scansUsed"] == used, used
+    exhausted = client.post("/api/v1/nutrition/scan", headers=auth, json={"imageBase64": JPEG_BYTES})
+    assert exhausted.status_code == 429 and "Retry-After" in exhausted.headers
+    usage_row = client.get("/api/v1/nutrition/usage", headers=auth).json()
+    assert usage_row["scansUsed"] == 10 and usage_row["dailyLimit"] == 10
+
+    # other users have their own quota
+    other = client.post(
+        "/api/v1/nutrition/scan",
+        headers=auth_header(db, make_user(db, "FreshFace", lat=12.98, lng=77.60)),
+        json={"imageBase64": JPEG_BYTES},
+    )
+    assert other.status_code == 200
+
+
+def test_nutrition_requires_auth(client):
+    assert client.post("/api/v1/nutrition/scan", json={"imageBase64": "/9j/"}).status_code == 401
+    assert client.get("/api/v1/nutrition/usage").status_code == 401

@@ -73,3 +73,121 @@ class MessageIn(CamelModel):
 class ReportIn(CamelModel):
     user_id: str
     reason: str | None = Field(default=None, max_length=1000)
+
+
+# ---------- Nutrition scanner ----------
+
+_NUTRITION_FACTS_EXAMPLE = {"kcal": 682, "protein": 30, "carbs": 98, "fat": 13, "fiber": 8}
+
+_NUTRITION_ITEM_EXAMPLE = {
+    "name": "roti / chapati",
+    "grams": 180,
+    "conf": "HIGH",
+    "source": "DB",
+    "n": {"kcal": 504, "protein": 18, "carbs": 82.8, "fat": 9, "fiber": 7.2},
+}
+
+
+class NutritionFacts(BaseModel):
+    """Nutrition totals as displayed on the results screen (grams for macros, count for kcal)."""
+
+    model_config = ConfigDict(json_schema_extra={"example": _NUTRITION_FACTS_EXAMPLE, "description": "All values for the scanned meal."})
+
+    kcal: int
+    protein: float
+    carbs: float
+    fat: float
+    fiber: float
+
+
+class NutritionItem(BaseModel):
+    """One distinct food item recognised in the photo."""
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "examples": [_NUTRITION_ITEM_EXAMPLE],
+            "description": "`source` DB = matched against the built-in food table (deterministic), "
+            "AI = model estimate. `conf` is the model's confidence.",
+        }
+    )
+
+    name: str = Field(max_length=80)
+    grams: float = Field(gt=0, le=3000, description="Estimated weight of this item in the photo.")
+    conf: str = Field(description="Model confidence: HIGH | MEDIUM | LOW")
+    source: str = Field(description="DB (deterministic food table) or AI (model per-100g estimate)")
+    n: NutritionFacts
+
+
+class ScanIn(CamelModel):
+    """Request body for POST /nutrition/scan."""
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {"imageBase64": "data:image/jpeg;base64,/9j/4AAQSk..."},
+            "description": "The meal photo, base64-encoded. Both bare base64 and the `data:image/*;base64,` "
+            "prefix are accepted. JPEG or PNG, 5 MB max.",
+        }
+    )
+
+    image_base64: str
+
+
+class ScanOut(BaseModel):
+    """Response for POST /nutrition/scan — use these numbers straight on the results screen."""
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "scanId": "0195ef2a-7a1a-7ce1-8ff1-62e0c85db6a1",
+                "scansUsed": 3,
+                "scansRemaining": 7,
+                "items": [
+                    _NUTRITION_ITEM_EXAMPLE,
+                    {
+                        "name": "dal / lentil curry",
+                        "grams": 250,
+                        "conf": "MEDIUM",
+                        "source": "DB",
+                        "n": {"kcal": 290, "protein": 22.5, "carbs": 40, "fat": 3.8, "fiber": 15},
+                    },
+                ],
+                "totals": _NUTRITION_FACTS_EXAMPLE,
+            }
+        }
+    )
+
+    scan_id: str = Field(serialization_alias="scanId")
+    items: list[NutritionItem]
+    totals: NutritionFacts
+    scans_used: int = Field(serialization_alias="scansUsed")
+    scans_remaining: int = Field(serialization_alias="scansRemaining")
+
+
+class UsageOut(BaseModel):
+    """Response for GET /nutrition/usage — show this near the scanner to display the user's daily allowance."""
+
+    model_config = ConfigDict(json_schema_extra={"example": {"scansUsed": 4, "dailyLimit": 10, "resetAt": "2026-10-23T00:00:00Z"}})
+
+    scans_used: int = Field(serialization_alias="scansUsed")
+    daily_limit: int = Field(serialization_alias="dailyLimit")
+    reset_at: str = Field(serialization_alias="resetAt", description="ISO timestamp when the daily quota resets (midnight UTC).")
+
+
+class ScanRecord(BaseModel):
+    """One stored scan as returned by GET /nutrition/history (quota counters omitted — they were live at the time)."""
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "scanId": "0195ef2a-7a1a-7ce1-8ff1-62e0c85db6a1",
+                "createdAt": "2026-10-22T12:30:05.123456Z",
+                "items": [_NUTRITION_ITEM_EXAMPLE],
+                "totals": _NUTRITION_FACTS_EXAMPLE,
+            }
+        }
+    )
+
+    scan_id: str = Field(serialization_alias="scanId")
+    created_at: str = Field(serialization_alias="createdAt")
+    items: list[NutritionItem]
+    totals: NutritionFacts

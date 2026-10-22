@@ -12,6 +12,7 @@ dependencies = [
     "python-multipart",
     "pyjwt",
     "argon2-cffi",
+    "httpx",  # calls Gemini for the nutrition scanner
 ]
 
 [project.optional-dependencies]
@@ -31,6 +32,8 @@ target-version = "py312"
 [tool.ruff.lint]
 select = ["E", "F", "I", "W", "B"]
 ignore = ["B008"]  # Depends() in defaults is the idiomatic FastAPI pattern
+# nutrition.py carries the (long) Gemini prompt, copied verbatim from the proven frontend flow
+per-file-ignores = { "app/nutrition.py" = ["E501"] }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

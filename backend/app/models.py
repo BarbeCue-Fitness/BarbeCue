@@ -181,6 +181,20 @@ class Report(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
 
 
+class NutritionScan(Base):
+    """One successful meal-photo analysis. The photo itself is never stored (deliberate)."""
+
+    __tablename__ = "nutrition_scans"
+    __table_args__ = (Index("ix_nutrition_user_day", "user_id", "created_at"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    item_count: Mapped[int] = mapped_column(Integer)
+    items_json: Mapped[str] = mapped_column(Text)  # [{name, grams, conf, source, n:{kcal,...}}]
+    totals_json: Mapped[str] = mapped_column(Text)  # {kcal, protein, carbs, fat, fiber}
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
+
+
 # a match is accessible only while both users reference it and it is unmatched
 def match_between(a_id: str, b_id: str) -> tuple[str, str]:
     return (a_id, b_id) if a_id < b_id else (b_id, a_id)

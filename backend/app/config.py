@@ -17,6 +17,10 @@ class Settings(BaseSettings):
     uploads_dir: Path = BASE_DIR / "uploads"
     # CORS origins allowed to call the API (Expo web dev server, etc.)
     cors_origins: str = "http://localhost:8081,http://localhost:19006"
+    # Nutrition scanner (photo → meal analysis). Empty key = feature disabled (endpoint returns 503).
+    gemini_api_key: str = ""
+    gemini_model: str = "gemini-3.5-flash-lite"
+    nutrition_daily_limit: int = 10  # scans per user per UTC day
 
     @property
     def uploads_path(self) -> Path:
