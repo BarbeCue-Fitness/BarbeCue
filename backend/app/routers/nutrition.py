@@ -75,6 +75,18 @@ def scan(body: ScanIn, db: Session = Depends(get_db), me: User = Depends(get_cur
     except GeminiError as exc:
         raise HTTPException(status_code=502, detail=f"Meal analysis failed: {exc}") from exc
 
+    # recount after the (long) analysis: reqs sent while it ran have moved the counter.
+    # shortcut: two concurrent scans from different devices can both pass and overshoot
+    # by a couple of scans — harmless (a few paid calls), upgrade when real billing exists
+    used = _scans_used(db, me.id)
+    if used >= settings.nutrition_daily_limit:
+        retry_after = (_daily_reset_at() - now_utc()).total_seconds()
+        raise HTTPException(
+            status_code=429,
+            detail=f"You've reached today's limit of {settings.nutrition_daily_limit} meal scans. Resets at midnight UTC.",
+            headers={"Retry-After": str(max(1, int(retry_after)))},
+        )
+
     tally = ScanOut(
         scan_id=new_id(),
         items=result["items"],
@@ -120,13 +132,19 @@ def usage(db: Session = Depends(get_db), me: User = Depends(get_current_user)) -
     "Optionally `?scanId=` for exactly one. **Auth required.**",
 )
 def history(scanId: str | None = None, db: Session = Depends(get_db), me: User = Depends(get_current_user)) -> list[ScanRecord]:
-    query = db.query(NutritionScan).filter(NutritionScan.user_id == me.id)
     if scanId:
         one = db.get(NutritionScan, scanId)
         if not one or one.user_id != me.id:
             raise HTTPException(status_code=404, detail="Scan not found")
         return [_scan_record(one)]
-    return [_scan_record(row) for row in query.order_by(NutritionScan.created_at.desc()).limit(30)]
+    rows = (
+        db.query(NutritionScan)
+        .filter(NutritionScan.user_id == me.id)
+        .order_by(NutritionScan.created_at.desc())
+        .limit(30)
+        .all()
+    )
+    return [_scan_record(row) for row in rows]
 
 
 def _scan_record(row: NutritionScan) -> ScanRecord:

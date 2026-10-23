@@ -1,6 +1,8 @@
 """All ORM models. Portable types only: no SQLite-specific columns, no JSON columns."""
 
 import enum
+import os
+import time
 import uuid
 from datetime import date, datetime, timezone
 
@@ -24,8 +26,18 @@ def now_utc() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None)  # naive UTC everywhere; add tz back only on output
 
 
+def age_on(dob: date) -> int:
+    today = now_utc().date()
+    return today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
+
+
 def new_id() -> str:
-    return str(uuid.uuid7())
+    # UUIDv7 by hand: stdlib uuid.uuid7 only exists from CPython 3.14, pyproject targets 3.12+
+    unix_ms = (time.time_ns() // 1_000_000) & ((1 << 48) - 1)
+    raw = bytearray(unix_ms.to_bytes(6, "big") + os.urandom(10))
+    raw[6] = (raw[6] & 0x0F) | 0x70  # version 7
+    raw[8] = (raw[8] & 0x3F) | 0x80  # variant RFC 9562
+    return str(uuid.UUID(bytes=bytes(raw)))
 
 
 # "Prefer not to say" is never stored: a NULL attribute means undisclosed, and a

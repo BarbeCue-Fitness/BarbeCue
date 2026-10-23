@@ -11,7 +11,7 @@ import { PrimaryButton } from '@/components/primary-button';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Radius, Spacing } from '@/constants/theme';
-import { analyzeMeal, hasGeminiKey, type MealItem, type MealResult } from '@/features/nutrition/scanner';
+import { scanMeal, type MealItem, type MealResult } from '@/services/api';
 import { useTheme } from '@/hooks/use-theme';
 
 type Photo = { uri: string; base64: string };
@@ -66,7 +66,7 @@ export default function NutritionScreen() {
     setLoading(true);
     setError(null);
     try {
-      setResult(await analyzeMeal(photo.base64));
+      setResult(await scanMeal(photo.base64));
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -79,15 +79,6 @@ export default function NutritionScreen() {
       <SafeAreaView style={styles.safe} edges={['top']}>
         <ScrollView contentContainerStyle={styles.content}>
           <PageHeader title="Nutrition scanner" subtitle="Photo → calories and macros" onBack={() => router.back()} />
-
-          {!hasGeminiKey ? (
-            <View style={[styles.notice, { backgroundColor: theme.backgroundSelected }]}>
-              <Ionicons name="key-outline" size={18} color={theme.accent} />
-              <ThemedText type="small" themeColor="textSecondary" style={styles.flex}>
-                Add <ThemedText type="code">EXPO_PUBLIC_GEMINI_API_KEY</ThemedText> to frontend/.env and restart the dev server to enable scanning.
-              </ThemedText>
-            </View>
-          ) : null}
 
           <View style={styles.actions}>
             <PrimaryButton
@@ -192,7 +183,6 @@ const styles = StyleSheet.create({
   safe: { flex: 1 },
   content: { padding: Spacing.three, gap: Spacing.three, paddingBottom: Spacing.five },
   flex: { flex: 1 },
-  notice: { flexDirection: 'row', gap: Spacing.two, alignItems: 'flex-start', padding: Spacing.two, borderRadius: Radius.medium },
   actions: { flexDirection: 'row', gap: Spacing.two },
   secondary: {
     width: 52,

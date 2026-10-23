@@ -72,7 +72,7 @@ def make_user(
     )
     db.add(user)
     db.flush()
-    db.add(Photo(user_id=user.id, url=f"https://i.pravatar.cc/600?img={len(name) % 80 + 1}", position=0))
+    db.add(Photo(user_id=user.id, url=f"https://i.pravatar.cc/600?img={len(name) % 70 + 1}", position=0))
     db.commit()
     return user
 

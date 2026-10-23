@@ -22,7 +22,8 @@ def hash_password(password: str) -> str:
 def verify_password(password: str, password_hash: str) -> bool:
     try:
         return _hasher.verify(password_hash, password)
-    except VerifyMismatchError:
+    except (VerifyMismatchError, InvalidHashError):
+        # InvalidHashError: a corrupt stored hash must read as "wrong password", not 500
         return False
 
 

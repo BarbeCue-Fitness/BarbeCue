@@ -9,6 +9,9 @@ cd backend
 python3 -m venv .venv
 .venv/bin/pip install -e ".[dev]"
 
+# environment — a JWT secret keeping tokens forge-proof is required, no default
+.venv/bin/python -c "import secrets; print('JWT_SECRET=' + secrets.token_hex(32))" > .env
+
 # database
 .venv/bin/alembic upgrade head
 

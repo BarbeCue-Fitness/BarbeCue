@@ -22,6 +22,8 @@ export interface User {
   height?: string;
   ethnicity?: string;
   gender?: 'Male' | 'Female' | 'Non-binary';
+  /** set by GET /users/{id}: the active match the viewer shares with this user (null if none) */
+  matchId?: string | null;
 }
 
 export interface SwipeAction {
@@ -37,6 +39,7 @@ export interface Match {
   hasUnread: boolean;
   unread: number;
   category?: 'new' | 'active' | 'expired';
+  lastMessage?: Message;
 }
 
 export interface Message {

@@ -3,12 +3,12 @@
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
-from sqlalchemy import select
+from sqlalchemy import func, select, tuple_
 from sqlalchemy.orm import Session, joinedload
 
 from ..db import get_db
 from ..deps import get_current_user
-from ..matching import category_of, is_blocked
+from ..matching import attribute_map, category_of, is_blocked, photo_map
 from ..models import Match, Message, User, now_utc
 from ..schemas import MessageIn
 from ..serializers import iso, user_out
@@ -32,12 +32,14 @@ def likes_you(db: Session = Depends(get_db), me: User = Depends(get_current_user
         .filter(Swipe.target_id == me.id, Swipe.action.in_([SwipeAction.like, SwipeAction.super_like]))
         .all()
     )
-    out: list[dict] = []
+    out_users: list[User] = []
     for user in liked_mine:
         if user.id in mine or is_blocked(db, me.id, user.id):
             continue
-        out.append(user_out(db, user, viewer=me))
-    return out
+        out_users.append(user)
+    attrs = attribute_map(db, {user.id for user in out_users})
+    photos = photo_map(db, {user.id for user in out_users})
+    return [user_out(db, user, viewer=me, attrs=attrs.get(user.id, {}), photo_urls=photos.get(user.id, [])) for user in out_users]
 
 
 @router.get("/matches")
@@ -49,22 +51,77 @@ def list_matches(db: Session = Depends(get_db), me: User = Depends(get_current_u
         .order_by(Match.created_at.desc())
         .all()
     )
-    others: list[User] = []
     active: list[tuple[Match, User]] = []
     for match in matches:
         other = _other_user(match, me)
         if other and not is_blocked(db, me.id, other.id):
             active.append((match, other))
-            others.append(other)
-    return [match_out(match, other, me, db) for match, other in active]
+    if not active:
+        return []
+    # 3 queries for the whole page instead of ~5 per match (message fan-out bug class)
+    match_ids = [match.id for match, _ in active]
+    last_at = dict(
+        db.query(Message.match_id, func.max(Message.created_at))
+        .filter(Message.match_id.in_(match_ids))
+        .group_by(Message.match_id)
+        .all()
+    )
+    unread = dict(
+        db.query(Message.match_id, func.count(Message.id))
+        .filter(
+            Message.match_id.in_(match_ids),
+            Message.sender_id != me.id,
+            Message.read_at.is_(None),
+        )
+        .group_by(Message.match_id)
+        .all()
+    )
+    last: dict[str, Message] = {}
+    if last_at:
+        rows = db.query(Message).filter(tuple_(Message.match_id, Message.created_at).in_(list(last_at.items()))).all()
+        for row in rows:
+            current = last.get(row.match_id)
+            if current is None or row.created_at >= current.created_at:
+                last[row.match_id] = row
+    others = {other.id for _, other in active}
+    attrs = attribute_map(db, others)
+    photos = photo_map(db, others)
+    return [
+        match_out(
+            match,
+            other,
+            me,
+            db,
+            last_message=last.get(match.id),
+            unread_count=unread.get(match.id, 0),
+            attrs=attrs.get(other.id, {}),
+            other_photos=photos.get(other.id, []),
+        )
+        for match, other in active
+    ]
 
 
-def match_out(match: Match, other: User, me: User, db: Session) -> dict:
-    last = db.scalars(select(Message).where(Message.match_id == match.id).order_by(Message.created_at.desc()).limit(1)).first()
-    unread = db.query(Message).filter(Message.match_id == match.id, Message.sender_id == other.id, Message.read_at.is_(None)).count()
+def match_out(
+    match: Match,
+    other: User,
+    me: User,
+    db: Session,
+    last_message: Message | None = None,
+    unread_count: int | None = None,
+    attrs: dict | None = None,
+    other_photos: list[str] | None = None,
+) -> dict:
+    if last_message is None:
+        last = db.scalars(select(Message).where(Message.match_id == match.id).order_by(Message.created_at.desc()).limit(1)).first()
+    else:
+        last = last_message
+    if unread_count is None:
+        unread = db.query(Message).filter(Message.match_id == match.id, Message.sender_id == other.id, Message.read_at.is_(None)).count()
+    else:
+        unread = unread_count
     return {
         "id": match.id,
-        "user": user_out(db, other, viewer=me),
+        "user": user_out(db, other, viewer=me, attrs=attrs, photo_urls=other_photos),
         "matchedAt": iso(match.created_at),
         "hasUnread": unread > 0,
         "unread": unread,

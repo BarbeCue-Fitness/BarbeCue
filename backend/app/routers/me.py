@@ -53,12 +53,15 @@ def patch_me(body: MePatchIn, db: Session = Depends(get_db), user: User = Depend
                 db.flush()
             user.attributes.append(UserAttribute(user_id=user.id, attribute_id=attribute.id))
 
-    if body.latitude is not None or body.longitude is not None:
-        user.latitude = body.latitude if body.latitude is not None else user.latitude
-        user.longitude = body.longitude if body.longitude is not None else user.longitude
+    latitude = data.pop("latitude", None)
+    longitude = data.pop("longitude", None)
+    if latitude is not None or longitude is not None:
+        # a half-sent pair would 500 every distance lookup forever (serializers checks only latitude)
+        if latitude is None or longitude is None:
+            raise HTTPException(status_code=422, detail="latitude and longitude must be sent together")
         # fuzz to ~1 km: coarse storage on purpose, fine precision is not needed for a 25 km radius
-        user.latitude = round(user.latitude, 2)
-        user.longitude = round(user.longitude, 2)
+        user.latitude = round(latitude, 2)
+        user.longitude = round(longitude, 2)
         user.location_updated_at = now_utc()
 
     for field, value in data.items():
@@ -70,6 +73,10 @@ def patch_me(body: MePatchIn, db: Session = Depends(get_db), user: User = Depend
 
 @router.put("/me/photos")
 def put_photos(body: PhotosIn, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    for url in body.urls:
+        # arbitrary URLs would make every viewer's app call a third-party host on card render
+        if not url.startswith(("http://", "https://", "/api/v1/media/")):
+            raise HTTPException(status_code=422, detail="Photo URLs must be http(s) or an uploaded media path")
     user.photos = []  # replace ordered list
     for position, url in enumerate(body.urls):
         user.photos.append(Photo(user_id=user.id, url=url, position=position))
@@ -88,8 +95,11 @@ def upload_media(
     data = file.file.read(MAX_UPLOAD_BYTES + 1)
     if len(data) > MAX_UPLOAD_BYTES:
         raise HTTPException(status_code=413, detail="Image must be 5 MB or smaller")
-    extension = "jpg" if file.content_type == "image/jpeg" else "png"
-    name = f"{new_id()}.{extension}"
+    # the client can lie about Content-Type: only the file's magic bytes are proof
+    is_png = data.startswith(b"\x89PNG")
+    if not is_png and not data.startswith(b"\xff\xd8\xff"):
+        raise HTTPException(status_code=415, detail="Only JPEG or PNG images are accepted")
+    name = f"{new_id()}.{'png' if is_png else 'jpg'}"
     (settings.uploads_path / name).write_bytes(data)
     # root-relative URL: the frontend fetches media from the same API origin (works on device + web)
     return {"url": f"/api/v1/media/{name}"}

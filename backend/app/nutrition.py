@@ -129,14 +129,22 @@ SCHEMA: dict[str, Any] = {
 }
 
 
-# deterministic lookup: item name vs db names + aliases, substring either direction
+# deterministic lookup: best-coverage substring match (port of the TS matcher in
+# frontend/src/features/nutrition/scanner.ts) — longest overlapping key wins, so
+# "chicken biryani" resolves to chicken, not biryani.
 def match_db(name: str) -> Food | None:
     s = name.lower().strip()
+    best: tuple[Food, int] | None = None
     for food in FOOD_DB:
-        keys = [food.name, *food.aliases]
-        if any(s in key or key in s for key in keys):
-            return food
-    return None
+        for key in (food.name, *food.aliases):
+            if s == key:
+                return food
+            if s not in key and key not in s:
+                continue
+            coverage = min(len(key), len(s)) / max(len(key), len(s))
+            if coverage >= 0.5 and (best is None or len(key) > best[1]):
+                best = (food, len(key))
+    return best[0] if best else None
 
 
 def scale(per100: list[float], grams: float) -> dict[str, float | int]:
@@ -190,13 +198,33 @@ def _call_once(data: bytes, mime: str) -> dict:
         payload = res.json()
     except ValueError as exc:
         raise GeminiError(f"Analysis service returned HTTP {res.status_code}") from exc
+    if not isinstance(payload, dict):
+        raise GeminiError(f"Analysis service returned HTTP {res.status_code}")
     if not res.is_success:
-        raise GeminiError(payload.get("error", {}).get("message") or f"Analysis service returned HTTP {res.status_code}")
-    text = "".join(part.get("text", "") for part in (payload.get("candidates", [{}])[0].get("content", {}).get("parts") or []))
+        error = payload.get("error")
+        message = error.get("message") if isinstance(error, dict) else None
+        raise GeminiError(message or f"Analysis service returned HTTP {res.status_code}")
+    candidates = payload.get("candidates") or []
+    if not candidates:
+        # safety-blocked or empty response: there is no candidate[0] to read
+        blocked = (payload.get("promptFeedback") or {}).get("blockReason")
+        raise GeminiError(f"the photo was rejected by the analysis service ({blocked})" if blocked else "the analysis service returned no result")
+    text = "".join(part.get("text", "") for part in (candidates[0].get("content", {}).get("parts") or []))
     try:
-        return json.loads(text)
+        parsed = json.loads(text)
     except ValueError as exc:
         raise GeminiError("Analysis service returned malformed JSON") from exc
+    if not isinstance(parsed, dict):
+        raise GeminiError("Analysis service returned malformed JSON")
+    return parsed
+
+
+def _num(value: Any) -> float:
+    """External model fields are untrusted: one bad value must not 500 the whole scan."""
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return 0.0
 
 
 def analyze_meal(b64: str) -> dict:
@@ -210,26 +238,26 @@ def analyze_meal(b64: str) -> dict:
             payload = _call_once(data, mime)  # 1 retry on malformed JSON (same as the JS flow)
         else:
             raise
+    raw_items = payload.get("items") or []
+    if not isinstance(raw_items, list):
+        raise GeminiError("Analysis service returned malformed JSON")
     items = []
-    for entry in (payload.get("items") or [])[:MAX_ITEMS]:
-        grams = min(max(float(entry.get("grams") or 0), MIN_GRAMS), MAX_GRAMS)
-        food = match_db(entry.get("name", ""))
+    for entry in raw_items[:MAX_ITEMS]:
+        if not isinstance(entry, dict):
+            continue
+        grams = min(max(_num(entry.get("grams")), MIN_GRAMS), MAX_GRAMS)
+        name = str(entry.get("name") or "")[:80]
+        food = match_db(name)
         per100 = (
             food.per100
             if food
-            else [
-                entry.get("k", 0),
-                entry.get("p2", 0),
-                entry.get("c2", 0),
-                entry.get("f2", 0),
-                entry.get("fb", 0),
-            ]
+            else [max(_num(entry.get(key)), 0.0) for key in ("k", "p2", "c2", "f2", "fb")]
         )
         items.append(
             {
-                "name": entry.get("name", ""),
+                "name": name,
                 "grams": grams,
-                "conf": entry.get("conf", "LOW"),
+                "conf": str(entry.get("conf") or "LOW"),
                 "source": "DB" if food else "AI",
                 "n": scale(per100, grams),
             }

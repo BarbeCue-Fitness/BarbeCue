@@ -54,8 +54,8 @@ export default function SettingsScreen() {
         text: 'Log out',
         style: 'destructive',
         onPress: () => {
-          logout();
-          router.replace('/login');
+          // wait for the stored session to clear: navigating first lets a slow logout wipe a newer login
+          void logout().finally(() => router.replace('/login'));
         },
       },
     ]);

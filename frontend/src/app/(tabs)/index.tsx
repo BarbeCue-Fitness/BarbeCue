@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
-import { Animated, ScrollView, StyleSheet, View } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Alert, Animated, ScrollView, StyleSheet, View } from 'react-native';
 import Reanimated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Swiper from 'react-native-deck-swiper';
 import { Ionicons } from '@expo/vector-icons';
@@ -16,6 +16,7 @@ import { useFilters } from '@/contexts/filters-context';
 import { useSettings } from '@/contexts/settings-context';
 import { useTheme } from '@/hooks/use-theme';
 import { roundDistance } from '@/lib/distance';
+import { syncLocation } from '@/lib/location';
 import { getDiscoverUsers, getMatches, sendSwipe } from '@/services/api';
 import type { SwipeAction, User } from '@/types';
 
@@ -36,7 +37,9 @@ export default function DiscoverScreen() {
   const [matched, setMatched] = useState<{ user: User; matchId?: string } | null>(null);
   const [matchCount, setMatchCount] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [completed, setCompleted] = useState(false);
+  const [locationOk, setLocationOk] = useState<boolean | null>(null);
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [gear] = useState(() => new Animated.Value(0));
   const gearSpin = gear.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '180deg'] });
@@ -51,36 +54,83 @@ export default function DiscoverScreen() {
 
   useEffect(() => {
     let active = true;
-    void Promise.all([getDiscoverUsers(filters), getMatches()]).then(([filteredUsers, matches]) => {
-      if (!active) return;
-      const results = mode === 'standouts' ? filteredUsers.filter((user) => user.standout) : filteredUsers;
-      setUsers(results);
-      setMatchCount(matches.length);
-      setLoading(false);
-      setCompleted(false);
-    });
+    // location first, deck second: the backend needs our pin to compute distances,
+    // and fetching before the pin lands would show an empty deck until the next visit
+    void (async () => {
+      try {
+        const ok = await syncLocation();
+        const [filteredUsers, matches] = await Promise.all([getDiscoverUsers(filters, mode), getMatches()]);
+        if (!active) return;
+        setUsers(filteredUsers);
+        setMatchCount(matches.length);
+        setLocationOk(ok);
+        setLoadError(null);
+        setLoading(false);
+        setCompleted(false);
+      } catch {
+        // a failed deck fetch must not spin forever: show what went wrong instead
+        if (!active) return;
+        setLoadError('Could not reach the BarbeCue server. Restart the backend, then reload the app.');
+        setLoading(false);
+      }
+    })();
     return () => { active = false; };
   }, [filters, mode]);
 
+  // matches made on other screens (like-backs) must not leave the chip stale: refresh only the
+  // count on focus — refetching the deck itself would reset the card stack on every tab visit
+  useFocusEffect(useCallback(() => {
+    let active = true;
+    void getMatches()
+      .then((allMatches) => { if (active) setMatchCount(allMatches.length); })
+      .catch(() => {});
+    return () => { active = false; };
+  }, []));
+
+  // the deck lib fires its index callback from an animation callback chain — overlapping
+  // swipes (rapid button taps) desync that index from the card on screen and would send the
+  // wrong person's like. gate the button path so one flight finishes before the next starts.
+  const swipingRef = useRef(false);
+  const actSwipe = (swipe: () => void) => {
+    if (swipingRef.current) return;
+    swipingRef.current = true;
+    // the swipe callback clears the gate; watchdog only guards a callback that never arrives
+    setTimeout(() => { swipingRef.current = false; }, 900);
+    swipe();
+  };
+
   const onSwipe = async (index: number, action: SwipeAction['action']) => {
+    swipingRef.current = false; // one callback per completed card: the next press may fly
     const user = users[index];
     if (!user) return;
-    const result = await sendSwipe({ userId: user.id, action, timestamp: new Date().toISOString() });
-    if (result.matched) {
-      setMatched({ user, matchId: result.matchId });
-      setMatchCount((count) => count + 1);
+    try {
+      const result = await sendSwipe({ userId: user.id, action, timestamp: new Date().toISOString() });
+      if (result.matched) {
+        setMatched({ user, matchId: result.matchId });
+        setMatchCount((count) => count + 1);
+      }
+    } catch {
+      // a lost swipe must be visible, not silently dropped with no popup and no match
+      Alert.alert('Swipe did not go through', 'The server did not confirm this swipe — try again once you are back online.');
+      // the card already left the deck, but the server kept the user unswiped: reload so it comes back
+      void getDiscoverUsers(filters, mode).then((next) => {
+        setUsers(next);
+        setCompleted(false);
+      }).catch(() => {});
     }
   };
 
   useEffect(() => {
     if (!matched) return;
     // eslint-disable-next-line react-hooks/immutability -- Reanimated shared values are mutable by design
-    matchOpacity.value = 1;
+    matchOpacity.value = 0;
+    // soft entrance, a readable hold, then a slow dissolve — no pop-in/pop-out
+    matchOpacity.value = withTiming(1, { duration: 250 });
     const timer = setTimeout(() => {
-      matchOpacity.value = withTiming(0, { duration: 300 });
-    }, 2000);
-    // unmount just after the fade so it never pops out mid-animation
-    const hide = setTimeout(() => setMatched(null), 2320);
+      matchOpacity.value = withTiming(0, { duration: 900 });
+    }, 2600);
+    // unmount just after the fade completes so it never pops out mid-animation
+    const hide = setTimeout(() => setMatched(null), 3600);
     return () => { clearTimeout(timer); clearTimeout(hide); };
   }, [matched, matchOpacity]);
 
@@ -119,6 +169,12 @@ export default function DiscoverScreen() {
             <ThemedView type="backgroundElement" style={styles.empty}>
               <ThemedText type="small" themeColor="textSecondary">Finding your gym partners…</ThemedText>
             </ThemedView>
+          ) : loadError ? (
+            <ThemedView type="backgroundElement" style={styles.empty}>
+              <Ionicons name="cloud-offline-outline" size={34} color={theme.accent} />
+              <ThemedText type="default" style={styles.emptyTitle}>Could not reach the server</ThemedText>
+              <ThemedText type="small" themeColor="textSecondary">{loadError}</ThemedText>
+            </ThemedView>
           ) : completed ? (
             <ThemedView type="backgroundElement" style={styles.empty}>
               <Ionicons name="checkmark-circle-outline" size={34} color={theme.accent} />
@@ -128,9 +184,15 @@ export default function DiscoverScreen() {
             </ThemedView>
           ) : users.length === 0 ? (
             <ThemedView type="backgroundElement" style={styles.empty}>
-              <Ionicons name="search-outline" size={34} color={theme.accent} />
-              <ThemedText type="default" style={styles.emptyTitle}>No partners match these filters</ThemedText>
-              <ThemedText type="small" themeColor="textSecondary">Try increasing your distance or widening your preferences.</ThemedText>
+              <Ionicons name={locationOk ? 'search-outline' : 'location-outline'} size={34} color={theme.accent} />
+              <ThemedText type="default" style={styles.emptyTitle}>
+                {locationOk ? 'No partners match these filters' : 'We couldn’t see your location'}
+              </ThemedText>
+              <ThemedText type="small" themeColor="textSecondary">
+                {locationOk
+                  ? 'Try increasing your distance or widening your preferences.'
+                  : 'Allow location access to find partners nearby, then reopen the app.'}
+              </ThemedText>
               <ChoiceChip label="Adjust filters" selected onPress={openFilters} />
             </ThemedView>
           ) : (
@@ -200,9 +262,9 @@ export default function DiscoverScreen() {
 
         {!loading && users.length > 0 && !completed ? (
           <View style={styles.actions} pointerEvents="box-none">
-            <IconButton name="close" label="Pass" variant="danger" size={58} onPress={() => swiperRef.current?.swipeLeft()} />
-            <IconButton name="barbell" label="Super like" variant="warning" size={68} onPress={() => swiperRef.current?.swipeTop()} />
-            <IconButton name="heart" label="Like" variant="primary" size={58} onPress={() => swiperRef.current?.swipeRight()} />
+            <IconButton name="close" label="Pass" variant="danger" size={58} onPress={() => actSwipe(() => swiperRef.current?.swipeLeft())} />
+            <IconButton name="barbell" label="Super like" variant="warning" size={68} onPress={() => actSwipe(() => swiperRef.current?.swipeTop())} />
+            <IconButton name="heart" label="Like" variant="primary" size={58} onPress={() => actSwipe(() => swiperRef.current?.swipeRight())} />
           </View>
         ) : null}
       </SafeAreaView>

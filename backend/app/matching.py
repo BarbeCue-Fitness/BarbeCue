@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 from math import asin, cos, radians, sin, sqrt
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from .models import (
@@ -17,6 +18,7 @@ from .models import (
     SwipeAction,
     User,
     UserAttribute,
+    age_on,
     match_between,
     now_utc,
 )
@@ -145,17 +147,15 @@ def apply_filters(candidates: list[User], attrs: dict[str, dict[str, list[str]]]
     me_loc = (me.latitude, me.longitude)
     age_min, age_max = filters.get("age_min", 18), filters.get("age_max", 99)
     out: list[tuple[float, User]] = []
-    today = now_utc().date()
 
     for user in candidates:
         # age
-        dob = user.date_of_birth
-        age = today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
+        age = age_on(user.date_of_birth)
         if not (age_min <= age <= age_max):
             continue
 
         # distance: candidates without coordinates or without viewer coordinates are dropped (pilot rule)
-        if me_loc[0] is None or user.latitude is None or user.longitude is None:
+        if me_loc[0] is None or me_loc[1] is None or user.latitude is None or user.longitude is None:
             continue
         distance = haversine_km(me_loc[0], me_loc[1], user.latitude, user.longitude)
         if filters.get("distance_km") is not None and distance > filters["distance_km"]:
@@ -222,6 +222,11 @@ def _create_match(db: Session, a_id: str, b_id: str) -> Match:
     a, b = match_between(a_id, b_id)
     match = Match(user_a_id=a, user_b_id=b)
     db.add(match)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        # both sides liked each other in the same moment; the pair's match row landed first
+        db.rollback()
+        return active_match_between(db, a_id, b_id)
     db.refresh(match)
     return match

@@ -2,6 +2,8 @@
 
 from datetime import timedelta
 
+import pytest
+
 from app.models import Message, Swipe, SwipeAction, now_utc
 
 from .conftest import add_attr, auth_header, force_match, make_user
@@ -105,6 +107,53 @@ def test_discover_filters_and_exclusion(client, db):
     client.post("/api/v1/swipes", headers=auth, json={"userId": near.id, "action": "pass"})
     after = client.get("/api/v1/discover", headers=auth).json()
     assert near.id not in {user["id"] for user in after}
+
+
+def test_swipe_race_returns_existing_match(client, db):
+    """Two users liking each other at the same moment: the second insert violates
+    the unique(match pair) constraint — the loser of the race must still see the match."""
+    from app.matching import _create_match
+
+    a = make_user(db, "Race A")
+    b = make_user(db, "Race B")
+    first = _create_match(db, a.id, b.id)
+    second = _create_match(db, a.id, b.id)
+    db.rollback()
+    assert second is not None and second.id == first.id
+
+
+def test_media_upload_rejects_fake_image(client, db):
+    """A file whose bytes don't start with a JPEG/PNG marker must be refused,
+    even if the request claims image/jpeg — content-type is a client claim."""
+    user = make_user(db, "Media Tester")
+    response = client.post(
+        "/api/v1/media",
+        files={"file": ("a.jpg", b"definitely not an image", "image/jpeg")},
+        headers=auth_header(db, user),
+    )
+    assert response.status_code == 415
+
+
+def test_me_rejects_half_a_location(client, db):
+    """latitude without longitude would leave the position half-set and make
+    every distance lookup 500 — the pair must be sent together."""
+    user = make_user(db, "Half Loc")
+    response = client.patch("/api/v1/me", json={"longitude": 77.5}, headers=auth_header(db, user))
+    assert response.status_code == 422
+    ok = client.patch("/api/v1/me", json={"longitude": 77.5, "latitude": 28.47}, headers=auth_header(db, user))
+    assert ok.status_code == 200, ok.text
+    assert ok.json()["distance"] == 0  # own profile
+
+
+def test_food_matcher_best_coverage(client):
+    """The Python matcher must behave like the TS original: the longest overlapping key
+    wins, and an exact alias beats an earlier substring hit."""
+    from app.nutrition import match_db
+
+    assert match_db("grilled chicken biryani").name == "cooked chicken breast"  # was biryani (8 g protein) before the port
+    assert match_db("biryani rice").name == "biryani"  # longest contained key wins, not first
+    assert match_db("rice pudding").name == "kheer / payasam"  # exact alias beats the earlier "rice" hit
+    assert match_db("totally unknown dish") is None
 
 
 def test_swipe_reciprocal_match(client, db):
@@ -302,3 +351,66 @@ def test_nutrition_scan_quota_and_auth(client, db, monkeypatch):
 def test_nutrition_requires_auth(client):
     assert client.post("/api/v1/nutrition/scan", json={"imageBase64": "/9j/"}).status_code == 401
     assert client.get("/api/v1/nutrition/usage").status_code == 401
+
+
+def test_me_location_is_fuzzed_to_two_decimals(client, db):
+    """The fuzzing step must survive the generic field loop: raw client precision
+    used to overwrite the rounded values right before commit."""
+    user = make_user(db, "Precise")
+    response = client.patch(
+        "/api/v1/me",
+        headers=auth_header(db, user),
+        json={"latitude": 12.345678, "longitude": 77.654321},
+    )
+    assert response.status_code == 200, response.text
+    db.refresh(user)
+    assert (user.latitude, user.longitude) == (12.35, 77.65)
+
+
+def test_blank_name_is_rejected(client, db):
+    """min_length counts spaces, and the stored value is stripped: whitespace-only
+    must fail validation instead of becoming an empty name."""
+    for name in ("   ", "\t\n"):
+        response = client.post(
+            "/api/v1/auth/signup",
+            json={"name": name, "email": f"blank{len(name)}@x.dev", "password": "password123", "dateOfBirth": "2000-01-01"},
+        )
+        assert response.status_code == 422, name
+    user = make_user(db, "PatchName")
+    auth = auth_header(db, user)
+    assert client.patch("/api/v1/me", headers=auth, json={"name": "  "}).status_code == 422
+    assert client.patch("/api/v1/me", headers=auth, json={"name": None}).status_code == 422
+
+
+def test_nutrition_tolerates_bad_model_fields(client, db, monkeypatch):
+    """Gemini output is external input: non-numeric grams and null nutrition values
+    used to raise inside the scan loop and surface as a 500."""
+    auth = auth_header(db, make_user(db, "BadModel"))
+    monkeypatch.setattr("app.config.settings.gemini_api_key", "test-key")
+    monkeypatch.setattr(
+        "app.nutrition._call_once",
+        lambda data, mime: {"items": [{"name": "mystery stew", "grams": "lots", "k": None, "p2": None, "c2": None, "f2": None, "fb": None, "conf": None}]},
+    )
+    response = client.post("/api/v1/nutrition/scan", headers=auth, json={"imageBase64": JPEG_BYTES})
+    assert response.status_code == 200, response.text
+    item = response.json()["items"][0]
+    assert item["grams"] == 1  # clamped to the valid minimum, not dropped
+    assert item["source"] == "AI" and item["n"]["kcal"] == 0
+
+
+def test_gemini_empty_candidates_raises_gemini_error(monkeypatch):
+    """A safety-blocked/empty Gemini response has no candidates[0]; the scanner must
+    report a 502-able error, not crash with IndexError."""
+    from app.nutrition import GeminiError, _call_once
+
+    class EmptyResponse:
+        status_code = 200
+        is_success = True
+
+        def json(self):
+            return {"promptFeedback": {"blockReason": "SAFETY"}}
+
+    monkeypatch.setattr("app.nutrition.httpx.post", lambda *args, **kwargs: EmptyResponse())
+    with pytest.raises(GeminiError, match="SAFETY"):
+        _call_once(b"jpeg-bytes", "image/jpeg")
+

@@ -4,11 +4,12 @@ from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..db import get_db
 from ..deps import get_current_user
-from ..models import User, now_utc
+from ..models import User, age_on, now_utc
 from ..schemas import LoginIn, SignUpIn
 from ..security import create_token, hash_password, verify_password
 
@@ -19,25 +20,24 @@ def auth_out(user: User) -> dict:
     return {"id": user.id, "name": user.name, "email": user.email, "token": create_token(user)}
 
 
-def _age_18_plus(dob: date) -> bool:
-    today = now_utc().date()
-    age = today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
-    return age >= 18
-
-
 @router.post("/signup")
 def signup(body: SignUpIn, db: Session = Depends(get_db)):
     try:
         dob = date.fromisoformat(body.date_of_birth)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail="dateOfBirth must be YYYY-MM-DD") from exc
-    if not _age_18_plus(dob):
+    if age_on(dob) < 18:
         raise HTTPException(status_code=422, detail="You must be 18 or older to join BarbeCue")
     if db.scalar(select(User).where(User.email == body.email)):
         raise HTTPException(status_code=409, detail="That email is already registered")
     user = User(email=body.email, password_hash=hash_password(body.password), name=body.name.strip(), date_of_birth=dob)
     db.add(user)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        # the same email raced in from a second request; the check above already missed it
+        db.rollback()
+        raise HTTPException(status_code=409, detail="That email is already registered") from None
     db.refresh(user)
     return auth_out(user)
 

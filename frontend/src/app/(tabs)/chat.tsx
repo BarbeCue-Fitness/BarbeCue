@@ -9,7 +9,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { getMatches, getMessages } from '@/services/api';
+import { getMatches } from '@/services/api';
 import type { Match, Message } from '@/types';
 
 type Conversation = { match: Match; preview?: Message };
@@ -29,17 +29,18 @@ export default function ChatInboxScreen() {
   const router = useRouter();
   const theme = useTheme();
   const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [loadFailed, setLoadFailed] = useState(false);
 
   useFocusEffect(useCallback(() => {
     let active = true;
-    void getMatches().then(async (matches) => {
-      const rows = await Promise.all(matches.map(async (match) => {
-        const messages = await getMessages(match.id);
-        const preview = messages.sort((a, b) => b.timestamp.localeCompare(a.timestamp))[0];
-        return { match, preview };
-      }));
-      if (active) setConversations(rows.sort((a, b) => (b.preview?.timestamp ?? b.match.matchedAt).localeCompare(a.preview?.timestamp ?? a.match.matchedAt)));
-    });
+    void getMatches()
+      .then((matches) => {
+        if (!active) return;
+        setLoadFailed(false);
+        const rows = matches.map((match) => ({ match, preview: match.lastMessage }));
+        setConversations(rows.sort((a, b) => (b.preview?.timestamp ?? b.match.matchedAt).localeCompare(a.preview?.timestamp ?? a.match.matchedAt)));
+      })
+      .catch(() => { if (active) setLoadFailed(true); });
     return () => { active = false; };
   }, []));
 
@@ -51,8 +52,10 @@ export default function ChatInboxScreen() {
         <PageHeader title="Messages" subtitle={unreadCount ? `${unreadCount} unread` : 'Keep the momentum going'} />
         {conversations.length === 0 ? (
           <View style={styles.empty}>
-            <ThemedText type="default">No conversations yet</ThemedText>
-            <ThemedText type="small" themeColor="textSecondary">When you match, your chats will show up here.</ThemedText>
+            <ThemedText type="default">{loadFailed ? 'Could not load conversations' : 'No conversations yet'}</ThemedText>
+            <ThemedText type="small" themeColor="textSecondary">
+              {loadFailed ? 'Check the backend connection and reopen this tab.' : 'When you match, your chats will show up here.'}
+            </ThemedText>
           </View>
         ) : (
           <FlatList

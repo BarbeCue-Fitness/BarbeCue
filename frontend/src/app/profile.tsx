@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -19,12 +19,30 @@ export default function ProfileScreen() {
   const router = useRouter();
   const theme = useTheme();
   const [me, setMe] = useState<User | null>(null);
+  const [loadError, setLoadError] = useState(false);
 
-  useEffect(() => {
-    void getMyProfile().then(setMe);
+  const load = useCallback(() => {
+    void getMyProfile().then(setMe).catch(() => setLoadError(true));
   }, []);
 
-  if (!me) return <ThemedView style={styles.container} />;
+  useEffect(load, [load]);
+
+  if (!me) {
+    return (
+      <ThemedView style={styles.container}>
+        <SafeAreaView style={styles.safe} edges={['top']}>
+          <PageHeader title="My Profile" onBack={() => router.back()} />
+          {loadError ? (
+            <View style={styles.loadError}>
+              <ThemedText style={styles.loadErrorTitle}>Could not load your profile</ThemedText>
+              <ThemedText type="small" themeColor="textSecondary">Check your connection and try again.</ThemedText>
+              <PrimaryButton label="Try again" onPress={load} />
+            </View>
+          ) : null}
+        </SafeAreaView>
+      </ThemedView>
+    );
+  }
 
   return (
     <ThemedView style={styles.container}>
@@ -105,4 +123,6 @@ const styles = StyleSheet.create({
   section: { gap: Spacing.two, paddingBottom: Spacing.three, borderBottomWidth: StyleSheet.hairlineWidth },
   sectionTitle: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
   tags: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.one },
+  loadError: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: Spacing.four, gap: Spacing.two },
+  loadErrorTitle: { fontWeight: '700', textAlign: 'center' },
 });

@@ -13,7 +13,7 @@ import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useSettings } from '@/contexts/settings-context';
 import { formatDistance } from '@/lib/distance';
-import { getMatches, getUserById, sendSwipe } from '@/services/api';
+import { getUserById, getSession, sendSwipe } from '@/services/api';
 import type { User } from '@/types';
 
 export default function UserProfileScreen() {
@@ -23,14 +23,23 @@ export default function UserProfileScreen() {
   const { distanceUnit } = useSettings();
   const { width } = useWindowDimensions();
   const [user, setUser] = useState<User | null>(null);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [photoIndex, setPhotoIndex] = useState(0);
   const [matchedMatchId, setMatchedMatchId] = useState<string | null>(null);
+  const [liking, setLiking] = useState(false);
 
   useEffect(() => {
     if (!id) return;
     let active = true;
-    void getUserById(id).then((profile) => { if (active) setUser(profile ?? null); });
-    void getMatches().then((matches) => { if (active) setMatchedMatchId(matches.find((match) => match.user.id === id)?.id ?? null); });
+    void getUserById(id)
+      .then((profile) => {
+        if (!active) return;
+        setUser(profile ?? null);
+        setMatchedMatchId(profile?.matchId ?? null); // /users/{id} already knows the active match
+        setLoadFailed(!profile); // a 404 resolves undefined: do not show "Loading" forever
+        setLoadFailed(false);
+      })
+      .catch(() => { if (active) setLoadFailed(true); });
     return () => { active = false; };
   }, [id]);
 
@@ -43,27 +52,39 @@ export default function UserProfileScreen() {
           <Pressable accessibilityRole="button" accessibilityLabel="Go back" onPress={() => router.back()} style={styles.backOnly}>
             <Ionicons name="arrow-back" size={22} color={theme.text} />
           </Pressable>
-          <ThemedText type="small" themeColor="textSecondary">Loading profile…</ThemedText>
+          <ThemedText type="small" themeColor="textSecondary">
+            {loadFailed ? 'This profile is unavailable. Go back and try again.' : 'Loading profile…'}
+          </ThemedText>
         </SafeAreaView>
       </ThemedView>
     );
   }
 
   const photos = user.photos.length ? user.photos : [user.avatar];
-  const isOwnProfile = user.id === 'me';
+  const isOwnProfile = user.id === getSession()?.id;
   const openMessage = (matchId?: string) => {
     const id = matchId ?? matchedMatchId;
     if (!id) return;
+    // arrow-wrapped: RN calls onPress with the press event, and openMessage's first
+    // parameter would swallow it and end up in the router as "/chat/[object Object]"
     router.push({ pathname: '/chat/[id]', params: { id } });
   };
 
   const likeProfile = async () => {
-    const result = await sendSwipe({ userId: user.id, action: 'like', timestamp: new Date().toISOString() });
-    if (result.matched) {
-      setMatchedMatchId(result.matchId ?? null);
-      openMessage(result.matchId);
-    } else {
-      Alert.alert('Like sent', `${user.name} will appear in your Likes when your app service is connected.`);
+    if (liking) return;
+    setLiking(true);
+    try {
+      const result = await sendSwipe({ userId: user.id, action: 'like', timestamp: new Date().toISOString() });
+      if (result.matched) {
+        setMatchedMatchId(result.matchId ?? null);
+        openMessage(result.matchId);
+      } else {
+        Alert.alert('Like sent', `${user.name} will see it in your matches if they like you back.`);
+      }
+    } catch (error) {
+      Alert.alert('Like did not go through', error instanceof Error ? error.message : 'Check your connection and try again.');
+    } finally {
+      setLiking(false);
     }
   };
 
@@ -140,7 +161,8 @@ export default function UserProfileScreen() {
           <SafeAreaView edges={['bottom']} style={[styles.footer, { borderTopColor: theme.border }]}>
             <PrimaryButton
               label={matched ? 'Message' : `Like ${user.name}`}
-              onPress={matched ? openMessage : likeProfile}
+              disabled={liking}
+              onPress={() => (matched ? openMessage() : void likeProfile())}
               leading={<Ionicons name={matched ? 'chatbubble-ellipses' : 'heart'} size={19} color={theme.onAccent} />}
             />
           </SafeAreaView>

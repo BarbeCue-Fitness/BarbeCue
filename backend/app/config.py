@@ -6,12 +6,14 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+_DEFAULT_JWT_SECRET = "CHANGE-ME-32-bytes-minimum-secret-key"
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     database_url: str = f"sqlite+pysqlite:///{BASE_DIR / 'barbecue.db'}"
-    jwt_secret: str = "CHANGE-ME-32-bytes-minimum-secret-key"  # set JWT_SECRET in production
+    jwt_secret: str = _DEFAULT_JWT_SECRET
     jwt_algorithm: str = "HS256"
     token_ttl_days: int = 30
     uploads_dir: Path = BASE_DIR / "uploads"
@@ -26,6 +28,14 @@ class Settings(BaseSettings):
     def uploads_path(self) -> Path:
         self.uploads_dir.mkdir(exist_ok=True)
         return self.uploads_dir
+
+    def model_post_init(self, __context) -> None:
+        # fail fast: a publicly known secret means anyone can forge login tokens for any user
+        if self.jwt_secret == _DEFAULT_JWT_SECRET:
+            raise RuntimeError(
+                "JWT_SECRET is not set — refusing to sign tokens with the known default. "
+                'Generate one: python -c "import secrets; print(secrets.token_hex(32))"'
+            )
 
 
 settings = Settings()

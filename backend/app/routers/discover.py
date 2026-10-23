@@ -1,6 +1,7 @@
 """Discover deck and swiping."""
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..db import get_db
@@ -11,6 +12,7 @@ from ..matching import (
     deck_candidates,
     ensure_reciprocal_match,
     is_blocked,
+    photo_map,
 )
 from ..models import Swipe, SwipeAction, User, now_utc
 from ..schemas import SwipeIn
@@ -75,7 +77,10 @@ def discover(
     candidates = deck_candidates(db, me.id)
     attrs = attribute_map(db, {user.id for user in candidates})
     ordered = apply_filters(candidates, attrs, me, filters)
-    return [user_out(db, user, viewer=me) for user in ordered[:visible]]
+    page = ordered[:visible]
+    # attrs already covers the page (page ⊆ candidates); only photos still need one query
+    photos = photo_map(db, {user.id for user in page})
+    return [user_out(db, user, viewer=me, attrs=attrs.get(user.id, {}), photo_urls=photos.get(user.id, [])) for user in page]
 
 
 @router.post("/swipes")
@@ -92,7 +97,16 @@ def swipe(body: SwipeIn, db: Session = Depends(get_db), me: User = Depends(get_c
         existing.created_at = now_utc()
     else:
         db.add(Swipe(swiper_id=me.id, target_id=target.id, action=SwipeAction(body.action)))
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        # a retry/double-tap raced us in: the row exists, so update it instead of 500ing
+        db.rollback()
+        existing = db.query(Swipe).filter(Swipe.swiper_id == me.id, Swipe.target_id == target.id).first()
+        if existing:
+            existing.action = SwipeAction(body.action)
+            existing.created_at = now_utc()
+            db.commit()
 
     if body.action == "pass":
         return {"matched": False}

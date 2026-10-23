@@ -23,9 +23,14 @@ export default function SignUpScreen() {
 
   const onSignUp = async () => {
     if (!form.name.trim()) return setError('Name is required');
+    if (form.password.length < 8) return setError('Password must be at least 8 characters'); // server enforces min 8
     if (!/^\d{4}-\d{2}-\d{2}$/.test(form.dob)) return setError('Date of birth must be YYYY-MM-DD');
-    const dob = new Date(form.dob);
-    if (Number.isNaN(dob.getTime())) return setError('Date of birth must be a real date');
+    const [year, month, day] = form.dob.split('-').map(Number);
+    const dob = new Date(year, month - 1, day);
+    // "2000-02-31" parses as March 2 in JS: reject dates the calendar does not have
+    if (dob.getFullYear() !== year || dob.getMonth() !== month - 1 || dob.getDate() !== day) {
+      return setError('Date of birth must be a real date');
+    }
     const now = new Date();
     let age = now.getFullYear() - dob.getFullYear();
     if (now.getMonth() < dob.getMonth() || (now.getMonth() === dob.getMonth() && now.getDate() < dob.getDate())) age--;

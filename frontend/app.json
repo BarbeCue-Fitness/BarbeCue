@@ -39,6 +39,12 @@
           "cameraPermission": "BarbeCue uses the camera to scan a meal.",
           "microphonePermission": false
         }
+      ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "BarbeCue uses your location to find gym partners nearby."
+        }
       ]
     ],
     "experiments": {

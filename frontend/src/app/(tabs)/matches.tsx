@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
-import { FlatList, Pressable, StyleSheet, View } from 'react-native';
+import { Alert, FlatList, Pressable, StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -13,7 +13,7 @@ import { useFilters } from '@/contexts/filters-context';
 import { useSettings } from '@/contexts/settings-context';
 import { useTheme } from '@/hooks/use-theme';
 import { formatDistance } from '@/lib/distance';
-import { getLikesYou, getMatches, getMessages, sendSwipe } from '@/services/api';
+import { getLikesYou, getMatches, sendSwipe } from '@/services/api';
 import type { Match, Message, User } from '@/types';
 
 type MatchFilter = 'All' | 'New' | 'Active' | 'Expired';
@@ -38,34 +38,43 @@ export default function MatchesScreen() {
   const { beginEditing } = useFilters();
   const [matches, setMatches] = useState<MatchRow[]>([]);
   const [likes, setLikes] = useState<User[]>([]);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [filter, setFilter] = useState<MatchFilter>('All');
   const [showLikes, setShowLikes] = useState(false);
+  const [likingId, setLikingId] = useState<string | null>(null);
 
-  useFocusEffect(useCallback(() => {
-    let active = true;
-    void Promise.all([getMatches(), getLikesYou()]).then(async ([allMatches, allLikes]) => {
-      const rows = await Promise.all(allMatches.map(async (match) => {
-        const messages = await getMessages(match.id);
-        const preview = messages.sort((a, b) => b.timestamp.localeCompare(a.timestamp))[0];
-        return { match, preview };
-      }));
-      if (active) {
-        setMatches(rows.sort((a, b) => b.match.matchedAt.localeCompare(a.match.matchedAt)));
+  const refresh = useCallback(() => {
+    void Promise.all([getMatches(), getLikesYou()])
+      .then(([allMatches, allLikes]) => {
+        setLoadFailed(false);
+        setMatches(allMatches.map((match) => ({ match, preview: match.lastMessage }))
+          .sort((a, b) => b.match.matchedAt.localeCompare(a.match.matchedAt)));
         setLikes(allLikes);
-      }
-    });
-    return () => { active = false; };
-  }, []));
-
+      })
+      .catch(() => {
+        // an empty list must not masquerade as "no matches": show that loading failed
+        setLoadFailed(true);
+      });
+  }, []);
+  useFocusEffect(refresh);
   const visibleMatches = useMemo(() => filter === 'All'
     ? matches
     : matches.filter(({ match }) => match.category?.toLowerCase() === filter.toLowerCase()), [filter, matches]);
   const unreadCount = matches.reduce((count, row) => count + row.match.unread, 0);
   const likeBack = async (user: User) => {
-    const result = await sendSwipe({ userId: user.id, action: 'like', timestamp: new Date().toISOString() });
-    if (result.matchId) {
-      setShowLikes(false);
-      router.push({ pathname: '/chat/[id]', params: { id: result.matchId } });
+    if (likingId) return;
+    setLikingId(user.id);
+    try {
+      const result = await sendSwipe({ userId: user.id, action: 'like', timestamp: new Date().toISOString() });
+      refresh(); // the like leaves the "Likes You" list even when no match is created
+      if (result.matchId) {
+        setShowLikes(false);
+        router.push({ pathname: '/chat/[id]', params: { id: result.matchId } });
+      }
+    } catch (error) {
+      Alert.alert('Like did not go through', error instanceof Error ? error.message : 'Check your connection and try again.');
+    } finally {
+      setLikingId(null);
     }
   };
   const displayRows: DisplayRow[] = showLikes
@@ -114,7 +123,13 @@ export default function MatchesScreen() {
           data={displayRows}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.list}
-          ListEmptyComponent={<ThemedText type="small" themeColor="textSecondary" style={styles.empty}>{showLikes ? 'No likes yet. Keep discovering.' : `No ${filter.toLowerCase()} matches yet. Keep discovering.`}</ThemedText>}
+          ListEmptyComponent={
+            <ThemedText type="small" themeColor="textSecondary" style={styles.empty}>
+              {loadFailed
+                ? 'Could not load matches — check the backend and reopen this tab.'
+                : showLikes ? 'No likes yet. Keep discovering.' : `No ${filter.toLowerCase()} matches yet. Keep discovering.`}
+            </ThemedText>
+          }
           renderItem={({ item }) => {
             const { user, match, preview, isLike } = item;
             return (
@@ -137,7 +152,7 @@ export default function MatchesScreen() {
                   </ThemedText>
                 </Pressable>
                 {isLike ? (
-                  <Pressable accessibilityRole="button" accessibilityLabel={`Like ${user.name} back`} onPress={() => void likeBack(user)} style={[styles.messageAction, { backgroundColor: theme.backgroundSelected }]}>
+                  <Pressable accessibilityRole="button" accessibilityLabel={`Like ${user.name} back`} disabled={likingId === user.id} onPress={() => void likeBack(user)} style={[styles.messageAction, { backgroundColor: theme.backgroundSelected }]}>
                     <Ionicons name="heart" size={19} color={theme.accent} />
                   </Pressable>
                 ) : match!.unread ? (

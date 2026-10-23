@@ -9,11 +9,26 @@ class CamelModel(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
 
+def _clean_name(value: str | None) -> str | None:
+    # min_length counts spaces, and the router stores the stripped value: "   " must not become ""
+    if value is None:
+        raise ValueError("name cannot be blank")
+    value = value.strip()
+    if not value:
+        raise ValueError("name cannot be blank")
+    return value
+
+
 class SignUpIn(CamelModel):
     name: str = Field(min_length=1, max_length=120)
     email: str = Field(max_length=255)
     password: str = Field(min_length=8, max_length=128)
     date_of_birth: str  # "YYYY-MM-DD"; parsed + 18+ checked server-side
+
+    @field_validator("name")
+    @classmethod
+    def clean_name(cls, value: str | None) -> str | None:
+        return _clean_name(value)
 
     @field_validator("email")
     @classmethod
@@ -48,6 +63,11 @@ class MePatchIn(CamelModel):
     languages: list[str] | None = None
     latitude: float | None = Field(default=None, ge=-90, le=90)
     longitude: float | None = Field(default=None, ge=-180, le=180)
+
+    @field_validator("name")
+    @classmethod
+    def clean_name(cls, value: str | None) -> str | None:
+        return _clean_name(value)
 
 
 class PhotosIn(CamelModel):
@@ -129,7 +149,9 @@ class ScanIn(CamelModel):
         }
     )
 
-    image_base64: str
+    # 5 MB decoded rounds to ~7.0 MB base64 plus the data-URL prefix; cap before a
+    # sharp oversized payload burns memory in the JSON parser
+    image_base64: str = Field(max_length=7_200_000)
 
 
 class ScanOut(BaseModel):

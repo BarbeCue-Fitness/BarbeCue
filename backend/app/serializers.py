@@ -5,16 +5,11 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 
 from .matching import ACTIVE_WINDOW, attribute_map, height_band, photo_map
-from .models import User, now_utc
+from .models import User, age_on, now_utc
 
 
 def iso(dt: datetime | None) -> str | None:
     return dt.isoformat() + "Z" if dt else None  # naive UTC stored; Z marks it as UTC for JS Date
-
-
-def age_on(dob) -> int:
-    today = now_utc().date()
-    return today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
 
 
 def height_str(cm: int | None) -> str:
@@ -26,12 +21,12 @@ def height_str(cm: int | None) -> str:
     return f"{feet}’{inches}”"
 
 
-def user_out(db: Session, user: User, viewer: User | None = None) -> dict:
-    attributes = attribute_map(db, {user.id})
+def user_out(db: Session, user: User, viewer: User | None = None, attrs: dict | None = None, photo_urls: list[str] | None = None) -> dict:
+    attributes = attrs if attrs is not None else attribute_map(db, {user.id})
     user_attrs = attributes.get(user.id, {})
-    photos = photo_map(db, {user.id}).get(user.id, [])
+    photos = photo_urls if photo_urls is not None else photo_map(db, {user.id}).get(user.id, [])
 
-    if viewer and viewer.id != user.id and viewer.latitude is not None and user.latitude is not None:
+    if viewer and viewer.id != user.id and viewer.latitude is not None and viewer.longitude is not None and user.latitude is not None and user.longitude is not None:
         from .matching import haversine_km
 
         distance = round(haversine_km(viewer.latitude, viewer.longitude, user.latitude, user.longitude), 1)

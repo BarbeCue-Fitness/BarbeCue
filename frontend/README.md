@@ -2,7 +2,7 @@
 
 BarbeCue is a gym-partner matchmaking app built with **Expo SDK 57**, React Native and Expo Router. Swipe through people who train like you, match, chat, track your week and scan a meal for calories and macros.
 
-> Status: prototype. All data comes from the mock API in `src/services/api.ts` — there is no production backend, billing or moderation yet.
+> Status: prototype connected to the pilot backend. Login, matching, chat and the nutrition scanner talk to the FastAPI server in `../backend`; Progress stats are still demo data. — there is no production backend, billing or moderation yet.
 
 ---
 
@@ -13,7 +13,7 @@ BarbeCue is a gym-partner matchmaking app built with **Expo SDK 57**, React Nati
 | Node.js | 20 LTS or newer (22 recommended) |
 | npm | 10+ (ships with Node) |
 | Expo Go | latest (SDK 57) on your phone — or a development build |
-| Gemini API key | only needed for the nutrition scanner |
+| Backend running | `../backend` (FastAPI) — login/matching/chat/scanner all need it |
 
 Everything runs from the **`frontend/`** directory. The repo root is not an npm workspace.
 
@@ -40,7 +40,7 @@ When you add a library later, always install it with `npx expo install <package>
 
 ## 2. Configure the environment
 
-The nutrition scanner calls Google Gemini directly from the client. Copy the example file and paste your own key:
+Copy the example file and point the app at your backend (start it first — see `../backend/README.md`):
 
 ```sh
 cp .env.example .env        # Windows PowerShell: Copy-Item .env.example .env
@@ -48,16 +48,12 @@ cp .env.example .env        # Windows PowerShell: Copy-Item .env.example .env
 
 ```dotenv
 # frontend/.env
-EXPO_PUBLIC_GEMINI_API_KEY=your-gemini-api-key
+EXPO_PUBLIC_API_URL=http://localhost:8000/api/v1
 ```
 
-- Get a key at https://aistudio.google.com/apikey.
-- Only `EXPO_PUBLIC_*` variables reach the app, and they are **inlined into the bundle** — this is prototype-only. Rotate the key and proxy Gemini through a backend before publishing a build.
-- `.env` is git-ignored; never commit it.
-- Without a key the app still runs — the scanner shows an "add your key" notice and the rest of the app is unaffected.
-- Optional: `EXPO_PUBLIC_API_URL` overrides the `http://localhost:3000/api` base URL used by the (currently unused) axios client.
-
-Restart the dev server after changing `.env` (`npx expo start --clear` if it does not pick the change up).
+- On a physical device replace `localhost` with your computer's LAN IP (backend CORS already allows the Expo origins; the API URL must be reachable from the phone).
+- `.env` is git-ignored; never commit it. The Gemini key lives only on the server now — the scanner calls `POST /nutrition/scan`.
+- Restart the dev server after changing `.env` (`npx expo start --clear` if it does not pick the change up).
 
 ## 3. Run the app
 
@@ -76,7 +72,7 @@ Every native module this app uses (`expo-image-picker`, `expo-image-manipulator`
 
 ### Demo login
 
-There is no real account service. On the login or sign-up screen use **any email containing `@`** and **any password with 6+ characters**. Sign-up additionally asks for a date of birth (`YYYY-MM-DD`, 18+).
+Use the seeded demo account from `backend/scripts/seed.py`: **demo@barbecue.app / demopass123**, or sign up fresh (date of birth `YYYY-MM-DD`, 18+). The session persists on the device until you log out.
 
 ### Try the features
 
@@ -88,7 +84,7 @@ There is no real account service. On the login or sign-up screen use **any email
 | Filters | Header `Matches N` chip → Matches, or Settings → Find training partners. Apply / Reset in the filter modal; More Filters adds body type, goals, diet, language, activity and interests. |
 | Matches / Chat | Matches has All / New / Active / Expired tabs plus "Likes You"; the chat screen supports sending messages and the workout-invite shortcut. |
 | Progress | Weekly training bars, weight trend, match activity — mock data from `getProgress()`. The nutrition scanner entry lives here. |
-| Nutrition | Progress → Nutrition scanner, or Settings. Take/choose a photo, tap **Analyze meal**. The photo is resized to 768 px and sent to Gemini; items are matched against the local food table for deterministic macros. |
+| Nutrition | Progress → Nutrition scanner, or Settings. Take/choose a photo, tap **Analyze meal**. The photo is resized to 768 px and sent to the backend, which calls Gemini server-side (10 scans/user/day). |
 | Settings | 10 color themes, light/dark/system mode, km/mi distance units, reset filters, "My profile", log out. |
 
 > The profile tab was removed on purpose: open your profile from **Settings → My profile**. Other people's profiles open from cards, matches and chats.
@@ -140,10 +136,9 @@ frontend/
 │  ├─ components/              shared UI, native/web tab bars
 │  ├─ constants/               theme tokens, filter constants
 │  ├─ contexts/                settings + filter drafts
-│  ├─ features/nutrition/      Gemini client + local food database
 │  ├─ hooks/                   color scheme + resolved theme
-│  ├─ lib/                     distance formatting, settings storage
-│  ├─ services/                api.ts (mock seam) + mock-data.ts
+│  ├─ lib/                     distance formatting, auth + settings storage
+│  ├─ services/                api.ts — every backend call + session handling
 │  └─ types/                   shared TypeScript models
 ├─ assets/branding/            icon, splash, favicon
 ├─ app.json                    Expo config (permissions, plugins, routes)
@@ -153,7 +148,7 @@ frontend/
 
 ### How data works
 
-`src/services/api.ts` is the single seam between UI and data: every function is async, and each has a `// TODO backend:` marker. Swapping the mock bodies for axios calls is the intended path. Mock state lives in module variables (`MOCK_MATCHES` grows when you match), so **it resets when the JS bundle reloads**, while settings persist (SQLite on native, `localStorage` on web).
+`src/services/api.ts` is the single seam between UI and backend: every server call, plus session persistence (`lib/auth-storage.ts` — SQLite kv-store on native, `localStorage` on web; survives app restarts until you log out). Response shapes are the camelCase dicts built by `../backend/app/serializers.py` — they are the contract.
 
 ---
 

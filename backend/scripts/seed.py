@@ -27,8 +27,8 @@ from app.security import hash_password  # noqa: E402
 
 DEMO_EMAIL = "demo@barbecue.app"
 DEMO_PASSWORD = "demopass123"
-# Bengaluru demo point so seeded users spread 1–25 km around the demo account
-CENTER = (12.9716, 77.5946)
+# Greater Noida demo point so seeded users spread 1–25 km around the demo account
+CENTER = (28.4744, 77.5040)
 
 NAMES = [
     "Sakshi",
@@ -188,7 +188,8 @@ def build_user(db, rng: random.Random, index: int, cache) -> User:
             user.__setattr__(f"{kind}_id", attribute.id)
     db.add(user)
     db.flush()
-    pic_ids = [((index * 7 + offset) % 84) + 1 for offset in range(3)]
+    # pravatar only serves images 1-70; ids above that 404 and leave the card blank
+    pic_ids = [((index * 7 + offset) % 70) + 1 for offset in range(3)]
     for position, photo_id in enumerate(pic_ids):
         db.add(Photo(user_id=user.id, url=f"https://i.pravatar.cc/600?img={photo_id}", position=position))
     return user
@@ -238,8 +239,10 @@ def seed() -> None:
     profiles = [build_user(db, rng, i, cache) for i in range(49)]
     db.flush()
 
-    lover = profiles[38]  # "Zoya" — inbound like waiting in Likes-you
-    db.add(Swipe(swiper_id=lover.id, target_id=demo.id, action=SwipeAction.like))
+    # 7 inbound likes so live-testing doesn't hinge on one lucky card in a 25-card deck:
+    # swiping right (or super-liking) any of them fires the match popup instantly
+    for lover in profiles[36:43]:
+        db.add(Swipe(swiper_id=lover.id, target_id=demo.id, action=SwipeAction.like))
 
     matched = profiles[5]  # "Ananya"-era friend — live match with a chat thread
     db.add(Swipe(swiper_id=matched.id, target_id=demo.id, action=SwipeAction.like))
@@ -265,7 +268,7 @@ def seed() -> None:
             )
         )
     db.commit()
-    print(f"Seeded {len(profiles)} profiles + demo ({DEMO_EMAIL}) — match with {matched.name}, like from {lover.name}.")
+    print(f"Seeded {len(profiles)} profiles + demo ({DEMO_EMAIL}) — match with {matched.name}, 7 inbound likes.")
 
 
 if __name__ == "__main__":
